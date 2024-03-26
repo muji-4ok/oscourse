@@ -10,6 +10,7 @@
 #include <kern/picirq.h>
 #include <kern/trap.h>
 #include <kern/traceopt.h>
+#include <kern/pmap.h>
 
 #define kilo      (1000ULL)
 #define Mega      (kilo * kilo)
