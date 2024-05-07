@@ -8,14 +8,15 @@
 #include <inc/elf.h>
 
 #include <kern/env.h>
-#include <kern/pmap.h>
-#include <kern/trap.h>
-#include <kern/monitor.h>
-#include <kern/sched.h>
 #include <kern/kdebug.h>
 #include <kern/macro.h>
+#include <kern/monitor.h>
 #include <kern/pmap.h>
+#include <kern/pmap.h>
+#include <kern/sched.h>
+#include <kern/timer.h>
 #include <kern/traceopt.h>
+#include <kern/trap.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -209,8 +210,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 #endif
 
     /* For now init trapframe with IF set */
-    // --- Not longer true
-    env->env_tf.tf_rflags = FL_IF;
+    env->env_tf.tf_rflags = FL_IF | (type == ENV_TYPE_FS ? FL_IOPL_3 : FL_IOPL_0);
 
     /* Clear the page fault handler until user installs one. */
     env->env_pgfault_upcall = 0;
@@ -595,6 +595,16 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         return -E_INVALID_EXE;
     }
 
+    /* NOTE: When merging origin/lab10 put this hunk at the end
+     *       of the function, when user stack is already mapped. */
+    if (env->env_type == ENV_TYPE_FS) {
+        /* If we are about to start filesystem server we need to pass
+         * information about PCIe MMIO region to it. */
+        struct AddressSpace *as = switch_address_space(&env->address_space);
+        env->env_tf.tf_rsp = make_fs_args((char *)env->env_tf.tf_rsp);
+        switch_address_space(as);
+    }
+
     return 0;
 }
 
@@ -626,6 +636,8 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
 
     // LAB 8: Your code here
     // What?
+
+    // LAB 10: Your code here
 }
 
 
@@ -665,6 +677,7 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+    // LAB 10: Your code here
 
     env_free(env);
 
