@@ -64,6 +64,8 @@ CallKernelThroughGate (
     return;
   }
 
+  DEBUG ((DEBUG_INFO, "JOS: Calling trampoline with params: EntryPoint=%p, LoaderParams=%p, GateData=%p\n", (VOID*) EntryPoint, LoaderParams, GateData));
+
   CallKernelThroughGateAsm (
     EntryPoint,
     LoaderParams,
