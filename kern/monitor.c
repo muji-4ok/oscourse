@@ -59,6 +59,20 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
     return 0;
 }
 
+static void
+print_rip_debug_description(uintptr_t rip) {
+    struct Ripdebuginfo info;
+    debuginfo_rip(rip, &info);
+
+    int function_start_offset = rip - info.rip_fn_addr;
+
+    cprintf(
+        "    %s:%d: %.*s+%d\n",
+        info.rip_file, info.rip_line,
+        info.rip_fn_namelen, info.rip_fn_name, function_start_offset
+    );
+}
+
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
     // LAB 2: Your code here
@@ -69,6 +83,8 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
 
     while (true) {
         cprintf("  rbp %016lx  rip %016lx\n", rbp, rip);
+        print_rip_debug_description(rip);
+
         rip = *((uint64_t *)rbp + 1);
         rbp = *(uint64_t *)rbp;
 
