@@ -368,6 +368,18 @@ GetKernelFile (
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
+
+    EFI_STATUS CloseStatus = CurrentDriveRoot->Close (CurrentDriveRoot);
+    if (EFI_ERROR (CloseStatus)) {
+      DEBUG ((DEBUG_ERROR, "JOS: Failed to close volume - %r\n", CloseStatus));
+    }
+
+    return Status;
+  }
+
+  Status = CurrentDriveRoot->Close (CurrentDriveRoot);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "JOS: Failed to close volume - %r\n", Status));
     return Status;
   }
 
