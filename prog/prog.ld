@@ -11,13 +11,13 @@ SECTIONS
     . = #ADDRESS#;
 
     .text : {
-        *(.text .stub .text.* .gnu.linkonce.t.*)
+        *(.text .ltext .stub .text.* .ltext.* .gnu.linkonce.t.*)
 
         . = ALIGN(8);
 
         PROVIDE(etext = .); /* Define the 'etext' symbol to this value */
 
-        *(.rodata .rodata.* .gnu.linkonce.r.* .data.*)
+        *(.rodata .lrodata .rodata.* .lrodata.* .gnu.linkonce.r.* .data.*)
 
         /* Ensure page-aligned segment size */
         . = ALIGN(0x1000);
@@ -25,11 +25,11 @@ SECTIONS
 
 
     .data : {
-        *(.data .data.rel.local .got .got.plt)
+        *(.ldata .data .data.* .data.rel.local .got .got.plt)
 
         PROVIDE(edata = .);
 
-        *(.bss)
+        *(.bss .lbss .bss.* .lbss.*)
 
         /* Ensure page-aligned segment size */
         . = ALIGN(0x1000);
