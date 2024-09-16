@@ -4,12 +4,31 @@
 #include <inc/dwarf.h>
 #include <inc/elf.h>
 #include <inc/x86.h>
+#include <inc/error.h>
 
 #include <kern/kdebug.h>
 #include <kern/env.h>
 #include <inc/uefi.h>
+#include <kern/traceopt.h>
 
-void
+static void
+load_kernel_symbol_info(struct ParsedElfSymbolSection *symbols, struct ParsedElfStringSection *strings) {
+    symbols->entries = (const struct Elf64_Sym *)uefi_lp->SymbolTableStart;
+    symbols->count = (uint64_t)(uefi_lp->SymbolTableEnd - uefi_lp->SymbolTableStart) / sizeof(struct Elf64_Sym);
+
+    strings->data = (const char *)uefi_lp->StringTableStart;
+    strings->size = (uint64_t)(uefi_lp->StringTableEnd - uefi_lp->StringTableStart);
+
+    if (trace_elf) {
+        cprintf("loaded kernel symbol info\n");
+        cprintf("  symbols->entries = %p\n", symbols->entries);
+        cprintf("  symbols->count   = %lu\n", symbols->count);
+        cprintf("  strings->data    = %p\n", strings->data);
+        cprintf("  strings->size    = %lu\n", strings->size);
+    }
+}
+
+static void
 load_kernel_dwarf_info(struct Dwarf_Addrs *addrs) {
     addrs->aranges_begin = (uint8_t *)(uefi_lp->DebugArangesStart);
     addrs->aranges_end = (uint8_t *)(uefi_lp->DebugArangesEnd);
@@ -108,6 +127,44 @@ error:
     return res;
 }
 
+static uintptr_t
+symbol_table_address_by_fname(const char *const target_name, uintptr_t *addr) {
+    struct ParsedElfSymbolSection symbols;
+    struct ParsedElfStringSection strings;
+    load_kernel_symbol_info(&symbols, &strings);
+
+    if (trace_elf) {
+        cprintf("parsing kernel symbol table\n");
+    }
+
+    for (uint64_t i = 0; i < symbols.count; ++i) {
+        const struct Elf64_Sym *symbol = &symbols.entries[i];
+
+        const char *name = strings.data + symbol->st_name;
+        uint8_t type = ELF_ST_TYPE(symbol->st_info);
+
+        if ((type == STT_OBJECT || type == STT_FUNC) && strcmp(name, target_name) == 0) {
+            if (trace_elf) {
+                cprintf("reading kernel symbol at index = %lu\n", i);
+                cprintf("  name            = %s\n", name);
+                cprintf("  info            = %hhx\n", symbol->st_info);
+                cprintf("  type            = %s\n", elf_symbol_type_to_name[type]);
+                cprintf("  other           = %hhx\n", symbol->st_other);
+                cprintf("  shndx           = %hu\n", symbol->st_shndx);
+                cprintf("  section index   = %hu\n", symbol->st_shndx);
+                cprintf("  value           = 0x%08lX\n", symbol->st_value);
+                cprintf("  size            = 0x%08lX\n", symbol->st_size);
+            }
+
+            *addr = (uintptr_t)symbol->st_value;
+
+            return 0;
+        }
+    }
+
+    return -E_NO_ENT;
+}
+
 uintptr_t
 find_function(const char *const fname) {
     /* There are two functions for function name lookup.
@@ -118,5 +175,36 @@ find_function(const char *const fname) {
 
     // LAB 3: Your code here:
 
-    return 0;
+    struct Dwarf_Addrs addrs;
+    load_kernel_dwarf_info(&addrs);
+
+    uintptr_t addr;
+
+    int symbol_table_result = 0;
+    int dwarf_pubnames_result = 0;
+    int dwarf_naive_result = 0;
+
+    symbol_table_result = symbol_table_address_by_fname(fname, &addr);
+
+    if (symbol_table_result < 0) {
+        dwarf_pubnames_result = address_by_fname(&addrs, fname, &addr);
+    }
+
+    if (symbol_table_result < 0 && dwarf_pubnames_result < 0) {
+        dwarf_naive_result = naive_address_by_fname(&addrs, fname, &addr);
+    }
+
+    if (symbol_table_result < 0 && dwarf_pubnames_result < 0 && dwarf_naive_result < 0) {
+        if (trace_elf) {
+            warn(
+                "failed to find function with name '%s' in debug symbols"
+                ". symbol table error = %i, pubnames error = %i, naive error = %i",
+                fname, symbol_table_result, dwarf_pubnames_result, dwarf_naive_result
+            );
+        }
+
+        return 0;
+    }
+
+    return addr;
 }

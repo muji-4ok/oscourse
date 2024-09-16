@@ -114,9 +114,9 @@ InitGraphics (
   // Hint: Use QueryMode/SetMode functions.
   //
 
-  DEBUG ((DEBUG_INFO, "JOS: Size of graphics mode info = %llu\n", GraphicsOutput->Mode->SizeOfInfo));
-  DEBUG ((DEBUG_INFO, "JOS: Current graphics mode num = %u\n", GraphicsOutput->Mode->Mode));
-  DEBUG ((DEBUG_INFO, "JOS: Number of graphic modes = %u\n", GraphicsOutput->Mode->MaxMode));
+  DEBUG ((DEBUG_VERBOSE, "JOS: Size of graphics mode info = %llu\n", GraphicsOutput->Mode->SizeOfInfo));
+  DEBUG ((DEBUG_VERBOSE, "JOS: Current graphics mode num = %u\n", GraphicsOutput->Mode->Mode));
+  DEBUG ((DEBUG_VERBOSE, "JOS: Number of graphic modes = %u\n", GraphicsOutput->Mode->MaxMode));
 
   UINT32 BestMode = GraphicsOutput->Mode->Mode;
   UINT32 BestWidth = GraphicsOutput->Mode->Info->HorizontalResolution;
@@ -136,10 +136,10 @@ InitGraphics (
     UINT32 Width = Info->HorizontalResolution;
     UINT32 Height = Info->VerticalResolution;
 
-    DEBUG ((DEBUG_INFO, "JOS: Graphics mode num = %u:\n", Mode));
-    DEBUG ((DEBUG_INFO, "JOS:   width = %u:\n", Width));
-    DEBUG ((DEBUG_INFO, "JOS:   height = %u:\n", Height));
-    DEBUG ((DEBUG_INFO, "JOS:   pixels per scanline = %u:\n", Info->PixelsPerScanLine));
+    DEBUG ((DEBUG_VERBOSE, "JOS: Graphics mode num = %u:\n", Mode));
+    DEBUG ((DEBUG_VERBOSE, "JOS:   width = %u:\n", Width));
+    DEBUG ((DEBUG_VERBOSE, "JOS:   height = %u:\n", Height));
+    DEBUG ((DEBUG_VERBOSE, "JOS:   pixels per scanline = %u:\n", Info->PixelsPerScanLine));
 
     if (Width <= BestWidth && Height <= BestHeight) {
       BestMode = Mode;

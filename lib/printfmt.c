@@ -57,15 +57,20 @@ print_num(void (*putch)(int, void *), void *put_arg,
 /* Get an unsigned int of various possible sizes from a varargs list,
  * depending on the lflag parameter. */
 static uintmax_t
-get_unsigned(va_list *ap, int lflag, bool zflag) {
+get_unsigned(va_list *ap, int lflag, int sflag, bool zflag) {
     if (zflag) return va_arg(*ap, size_t);
 
-    switch (lflag) {
-    case 0:
+    int diff = lflag - sflag;
+
+    if (diff <= -2) {
+        return (uint8_t)va_arg(*ap, unsigned int);
+    } else if (diff == -1) {
+        return (short unsigned int)va_arg(*ap, unsigned int);
+    } else if (diff == 0) {
         return va_arg(*ap, unsigned int);
-    case 1:
+    } else if (diff == 1) {
         return va_arg(*ap, unsigned long);
-    default:
+    } else {
         return va_arg(*ap, unsigned long long);
     }
 }
@@ -73,15 +78,20 @@ get_unsigned(va_list *ap, int lflag, bool zflag) {
 /* Same as getuint but signed - can't use getuint
  * because of sign extension */
 static intmax_t
-get_int(va_list *ap, int lflag, bool zflag) {
+get_int(va_list *ap, int lflag, int sflag, bool zflag) {
     if (zflag) return va_arg(*ap, size_t);
 
-    switch (lflag) {
-    case 0:
+    int diff = lflag - sflag;
+
+    if (diff <= -2) {
+        return (int8_t)va_arg(*ap, int);
+    } else if (diff == -1) {
+        return (short int)va_arg(*ap, int);
+    } else if (diff == 0) {
         return va_arg(*ap, int);
-    case 1:
+    } else if (diff == 1) {
         return va_arg(*ap, long);
-    default:
+    } else {
         return va_arg(*ap, long long);
     }
 }
@@ -106,7 +116,7 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
         /* Process a %-escape sequence */
         char padc = ' ';
         int width = -1, precision = -1;
-        unsigned lflag = 0, base = 10;
+        unsigned lflag = 0, sflag = 0, base = 10;
         bool altflag = 0, zflag = 0;
         uintmax_t num = 0;
     reswitch:
@@ -154,6 +164,10 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
             lflag++;
             goto reswitch;
 
+        case 'h': /* short flag (doubled for char) */
+            sflag++;
+            goto reswitch;
+
         case 'z':
             zflag = 1;
             goto reswitch;
@@ -195,7 +209,7 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
         }
 
         case 'd': /* (signed) decimal */ {
-            intmax_t i = get_int(&aq, lflag, zflag);
+            intmax_t i = get_int(&aq, lflag, sflag, zflag);
             if (i < 0) {
                 putch('-', put_arg);
                 i = -i;
@@ -206,13 +220,13 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
         }
 
         case 'u': /* unsigned decimal */
-            num = get_unsigned(&aq, lflag, zflag);
+            num = get_unsigned(&aq, lflag, sflag, zflag);
             /* base = 10; */
             goto number;
 
         case 'o': /* (unsigned) octal */
             // LAB 1: Your code here:
-            num = get_unsigned(&aq, lflag, zflag);
+            num = get_unsigned(&aq, lflag, sflag, zflag);
             base = 8;
             goto number;
 
@@ -225,7 +239,7 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
 
         case 'X': /* (unsigned) hexadecimal, uppercase */
         case 'x': /* (unsigned) hexadecimal, lowercase */
-            num = get_unsigned(&aq, lflag, zflag);
+            num = get_unsigned(&aq, lflag, sflag, zflag);
             base = 16;
         number:
             print_num(putch, put_arg, num, base, width, padc, ch == 'X');

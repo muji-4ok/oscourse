@@ -89,6 +89,16 @@ env_init(void) {
     /* Set up envs array */
 
     // LAB 3: Your code here
+
+    assert(NENV > 0);
+
+    env_free_list = &envs[0];
+
+    for (int i = 0; i < NENV; ++i) {
+        envs[i].env_id = 0;
+        envs[i].env_status = ENV_FREE;
+        envs[i].env_link = (i == NENV - 1) ? NULL : &envs[i + 1];
+    }
 }
 
 /* Allocates and initializes a new environment.
@@ -145,7 +155,14 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_KT;
 
     // LAB 3: Your code here:
-    // static uintptr_t stack_top = 0x2000000;
+
+    static uintptr_t stack_top = 0x2000000;
+    uint32_t index = env->env_id % NENV;
+    env->env_tf.tf_rsp = stack_top - PAGE_SIZE * 2 * index;
+
+    if (trace_elf) {
+        cprintf("[%08x] setting rsp = %p, index = %u, nenv = %d\n", env->env_id, (void*)env->env_tf.tf_rsp, index, NENV);
+    }
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -168,10 +185,151 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
  * must be performed within the image_start/image_end range.
  */
 static int
-bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_start, uintptr_t image_end) {
+bind_functions(
+    struct Env *env, struct Elf *elf, uintptr_t image_start, uintptr_t image_end, struct ParsedElfSections *parsed_sections
+) {
     // LAB 3: Your code here:
 
     /* NOTE: find_function from kdebug.c should be used */
+
+    if (trace_elf) {
+        cprintf("parsing symbol table\n");
+    }
+
+    for (uint64_t i = 0; i < parsed_sections->symbols.count; ++i) {
+        const struct Elf64_Sym *symbol = &parsed_sections->symbols.entries[i];
+
+        const char *name = parsed_sections->symbol_strings.data + symbol->st_name;
+        uint8_t type = ELF_ST_TYPE(symbol->st_info);
+
+        if (type == STT_OBJECT || type == STT_FUNC) {
+            uintptr_t addr = find_function(name);
+
+            if (trace_elf) {
+                cprintf("reading symbol at index = %lu\n", i);
+                cprintf("  name            = %s\n", name);
+                cprintf("  info            = %hhx\n", symbol->st_info);
+                cprintf("  type            = %s\n", elf_symbol_type_to_name[type]);
+                cprintf("  other           = %hhx\n", symbol->st_other);
+                cprintf("  shndx           = %hu\n", symbol->st_shndx);
+                cprintf("  section index   = %hu\n", symbol->st_shndx);
+                cprintf("  value           = 0x%08lX\n", symbol->st_value);
+                cprintf("  size            = 0x%08lX\n", symbol->st_size);
+                cprintf("  addr from dwarf = %p\n", (void*)addr);
+            }
+
+            if (addr != 0) {
+                *((uintptr_t *)symbol->st_value) = addr;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int
+verify_elf(const struct Elf *elf) {
+    if (elf->e_magic != ELF_MAGIC) {
+        warn(
+            "elf header magic is invalid. got magic = %04X, expected = %04X",
+            elf->e_magic, ELF_MAGIC
+        );
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_ehsize != sizeof(struct Elf)) {
+        warn(
+            "elf header size mismatch. got size = %hu, expected = %lu",
+            elf->e_ehsize, sizeof(struct Elf)
+        );
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_machine != EM_X86_64 && elf->e_machine != EM_AMD64) {
+        warn(
+            "elf machine type is not x86/amd64, which is unsupported. machine type = %02X",
+            elf->e_machine
+        );
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_shentsize != sizeof(struct Secthdr)) {
+        warn(
+            "elf section header size mismatch. got size = %hu, expected = %lu",
+            elf->e_shentsize, sizeof(struct Secthdr)
+        );
+        return -E_INVALID_EXE;
+    }
+
+    return 0;
+}
+
+static int
+parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedElfSections *output) {
+    uint64_t sect_headers_file_offset = elf->e_shoff;
+
+    int sect_headers_count = elf->e_shnum;
+
+    const struct Secthdr *sections = (struct Secthdr*)(binary + sect_headers_file_offset);
+
+    if (elf->e_shstrndx >= ET_LOPROC) {
+        warn("e_shstrndx >= 0xff00 unsupported. e_shstrndx = %hu", elf->e_shstrndx);
+        return -E_INVALID_EXE;
+    }
+
+    const struct Secthdr *section_name_table = &sections[elf->e_shstrndx];
+
+    output->section_strings.data = (char *)(binary + section_name_table->sh_offset);
+    output->section_strings.size = section_name_table->sh_size;
+
+    if (trace_elf) {
+        cprintf(
+            "loaded elf section string table. index = %d, addr = %p, size = %lu\n",
+            elf->e_shstrndx, output->section_strings.data, output->section_strings.size
+        );
+
+        cprintf(
+            "reading elf section headers. sect_headers_count = %d, sect_headers_file_offset = %lu\n",
+            sect_headers_count, sect_headers_file_offset
+        );
+    }
+
+    for (int i = 0; i < sect_headers_count; ++i) {
+        const struct Secthdr *section = &sections[i];
+        const char *name = output->section_strings.data + section->sh_name;
+
+        if (trace_elf) {
+            cprintf("section header. index = %d, name = %s\n", i, name);
+        }
+
+        if (strcmp(name, ".symtab") == 0) {
+            if (trace_elf) {
+                cprintf("  found symbol table\n");
+            }
+
+            if (section->sh_size % sizeof(struct Elf64_Sym) != 0) {
+                warn(
+                    "symbol table size does not divide by Elf64_Sym struct size. table size = %lu, struct size = %lu",
+                    section->sh_size, sizeof(struct Elf64_Sym)
+                );
+                return -E_INVALID_EXE;
+            }
+
+            output->symbols.entries = (const struct Elf64_Sym*)(binary + section->sh_offset);
+            output->symbols.count = section->sh_size / sizeof(struct Elf64_Sym);
+
+            if (trace_elf) {
+                cprintf("  number of entries = %lu\n", output->symbols.count);
+            }
+        } else if (strcmp(name, ".strtab") == 0) {
+            if (trace_elf) {
+                cprintf("  found symbol string table\n");
+            }
+
+            output->symbol_strings.data = (char *)(binary + section->sh_offset);
+            output->symbol_strings.size = section->sh_size;
+        }
+    }
 
     return 0;
 }
@@ -220,6 +378,102 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
+    if (trace_elf) {
+        cprintf("loading elf for env with id = %d\n", env->env_id);
+    }
+
+    struct Elf *elf = (struct Elf*)binary;
+
+    int result = verify_elf(elf);
+    
+    if (result < 0) {
+        warn("verifying elf failed: %i", result);
+        return result;
+    }
+
+    struct ParsedElfSections parsed_sections;
+    parsed_sections.section_strings.data = NULL;
+    parsed_sections.section_strings.size = 0;
+    parsed_sections.symbol_strings.data = NULL;
+    parsed_sections.symbol_strings.size = 0;
+    parsed_sections.symbols.entries = NULL;
+    parsed_sections.symbols.count = 0;
+
+    result = parse_elf_sections(elf, binary, &parsed_sections);
+
+    if (result < 0) {
+        warn("parsing elf sections failed: %i", result);
+        return result;
+    }
+
+    uint64_t prog_headers_file_offset = elf->e_phoff;
+    int prog_headers_count = elf->e_phnum;
+
+    struct Proghdr *prog_headers = (struct Proghdr *)(binary + prog_headers_file_offset);
+
+    if (trace_elf) {
+        cprintf(
+            "reading elf program headers. prog_headers_count = %d, prog_headers_file_offset = %lu\n",
+            prog_headers_count, prog_headers_file_offset
+        );
+    }
+
+    for (int i = 0; i < prog_headers_count; ++i) {
+        struct Proghdr *prog_header = &prog_headers[i];
+
+        if (trace_elf) {
+            cprintf("program header. index = %d, type = 0x%04X\n", i, prog_header->p_type);
+            cprintf("  p_offset = 0x%08lX\n", prog_header->p_offset);
+            cprintf("  p_va     = 0x%08lX\n", prog_header->p_va);
+            cprintf("  p_pa     = 0x%08lX\n", prog_header->p_pa);
+            cprintf("  p_filesz = 0x%08lX\n", prog_header->p_filesz);
+            cprintf("  p_memsz  = 0x%08lX\n", prog_header->p_memsz);
+            cprintf("  p_flags  = 0x%08X\n", prog_header->p_flags);
+            cprintf("  p_align  = 0x%08lX\n", prog_header->p_align);
+        }
+
+        if (prog_header->p_filesz > prog_header->p_memsz) {
+            warn("program header has file size > memory size, which is invalid");
+            return -E_INVALID_EXE;
+        }
+
+        if (prog_header->p_type == PT_LOAD) {
+            uint8_t *copy_src = binary + prog_header->p_offset;
+            uint8_t *copy_dst = (uint8_t *)(prog_header->p_va);
+            uint64_t copy_size = prog_header->p_filesz;
+
+            uint8_t *zero_dst = copy_dst + copy_size;
+            uint64_t zero_size = prog_header->p_memsz - prog_header->p_filesz;
+
+            if (trace_elf) {
+                cprintf(
+                    "loading program header into memory\n"
+                    "  copy_src = %p, copy_dst = %p, copy_size = %lx\n"
+                    "  zero_dst = %p, zero_size = %lx\n",
+                    copy_src, copy_dst, copy_size,
+                    zero_dst, zero_size
+                );
+            }
+
+            memcpy(copy_dst, copy_src, copy_size);
+            memset(zero_dst, 0, zero_size);
+        }
+    }
+
+    if (trace_elf) {
+        cprintf("setting entry point to env = %lx\n", elf->e_entry);
+        cprintf("setting flags to env = %x\n", elf->e_flags);
+    }
+
+    env->env_tf.tf_rip = elf->e_entry;
+    env->env_tf.tf_rflags = elf->e_flags;
+
+    if (trace_elf) {
+        cprintf("binding functions for env\n");
+    }
+
+    bind_functions(env, elf, 0, 0, &parsed_sections);
+
     return 0;
 }
 
@@ -232,6 +486,22 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
+
+    struct Env *env = NULL;
+
+    int result = env_alloc(&env, 0, type);
+
+    if (result < 0) {
+        panic("env_alloc failed during env_create with error: %i", result);
+    }
+
+    assert(env != NULL);
+
+    result = load_icode(env, binary, size);
+
+    if (result < 0) {
+        panic("load_icode failed during env_create with error: %i", result);
+    }
 }
 
 
@@ -260,6 +530,12 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+
+    env_free(env);
+
+    if (curenv == env) {
+        sched_yield();
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -352,6 +628,22 @@ env_run(struct Env *env) {
 
     // LAB 3: Your code here
 
-    while (1)
-        ;
+    if (curenv != NULL) {
+        if (curenv->env_status == ENV_RUNNING) {
+            curenv->env_status = ENV_RUNNABLE;
+        } else if (curenv->env_status == ENV_FREE) {
+            // pass
+        } else {
+            panic("unreachable - unexpected curenv status in env_run");
+        }
+    }
+
+    curenv = env;
+
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs += 1;
+
+    env_pop_tf(&curenv->env_tf);
+
+    panic("env_run unreachable?");
 }

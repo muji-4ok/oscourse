@@ -50,4 +50,8 @@
 #define trace_init 1
 #endif
 
+#ifndef trace_elf
+#define trace_elf 0
+#endif
+
 #endif
