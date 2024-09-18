@@ -494,7 +494,8 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     if_cprintf(trace_elf, "setting flags to env = %x\n", elf->e_flags);
 
     env->env_tf.tf_rip = elf->e_entry;
-    env->env_tf.tf_rflags = elf->e_flags;
+    // Set in env_alloc
+    // env->env_tf.tf_rflags = elf->e_flags;
 
     if_cprintf(trace_elf, "binding functions for env\n");
 
