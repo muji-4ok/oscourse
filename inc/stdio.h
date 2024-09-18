@@ -26,4 +26,6 @@ int vcprintf(const char *fmt, va_list) __attribute__((format(printf, 1, 0)));
 /* lib/readline.c */
 char *readline(const char *prompt);
 
+#define if_cprintf(condition, ...)  do { if (condition) { cprintf(__VA_ARGS__); } } while (0)
+
 #endif /* !JOS_INC_STDIO_H */

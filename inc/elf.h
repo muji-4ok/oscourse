@@ -4,24 +4,11 @@
 #include <inc/uefi.h>
 #include "../LoaderPkg/Include/Elf64.h"
 
-static const char* elf_symbol_type_to_name[16] = {
-    "notype",
-    "object",
-    "func",
-    "section",
-    "file",
-    "common",
-    "tls",
-    "num",
-    NULL,
-    NULL,
-    "loss",
-    NULL,
-    "hios",
-    "loproc",
-    NULL,
-    "hiproc"
-};
+const char* elf_symbol_type_to_name(uint8_t type);
+const char* elf_symbol_bind_to_name(uint8_t type);
+const char* elf_symbol_visibility_to_name(uint8_t type);
+
+const char *elf_prog_header_type_to_name(uint32_t type);
 
 struct ParsedElfStringSection {
     const char *data;

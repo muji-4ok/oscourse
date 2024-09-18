@@ -54,4 +54,8 @@
 #define trace_elf 0
 #endif
 
+#ifndef trace_elf_kdebug
+#define trace_elf_kdebug 0
+#endif
+
 #endif

@@ -160,9 +160,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     uint32_t index = env->env_id % NENV;
     env->env_tf.tf_rsp = stack_top - PAGE_SIZE * 2 * index;
 
-    if (trace_elf) {
-        cprintf("[%08x] setting rsp = %p, index = %u, nenv = %d\n", env->env_id, (void*)env->env_tf.tf_rsp, index, NENV);
-    }
+    if_cprintf(trace_elf, "[%08x] setting rsp = %p, index = %u, nenv = %d\n", env->env_id, (void*)env->env_tf.tf_rsp, index, NENV);
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -192,25 +190,24 @@ bind_functions(
 
     /* NOTE: find_function from kdebug.c should be used */
 
-    if (trace_elf) {
-        cprintf("parsing symbol table\n");
-    }
+    if_cprintf(trace_elf, "parsing symbol table\n");
 
     for (uint64_t i = 0; i < parsed_sections->symbols.count; ++i) {
         const struct Elf64_Sym *symbol = &parsed_sections->symbols.entries[i];
 
         const char *name = parsed_sections->symbol_strings.data + symbol->st_name;
         uint8_t type = ELF_ST_TYPE(symbol->st_info);
+        uint8_t bind = ELF_ST_BIND(symbol->st_info);
 
-        if (type == STT_OBJECT || type == STT_FUNC) {
+        if (type == STT_OBJECT && (bind == STB_GLOBAL || bind == STB_WEAK)) {
             uintptr_t addr = find_function(name);
 
             if (trace_elf) {
                 cprintf("reading symbol at index = %lu\n", i);
                 cprintf("  name            = %s\n", name);
-                cprintf("  info            = %hhx\n", symbol->st_info);
-                cprintf("  type            = %s\n", elf_symbol_type_to_name[type]);
-                cprintf("  other           = %hhx\n", symbol->st_other);
+                cprintf("  type            = %s\n", elf_symbol_type_to_name(type));
+                cprintf("  bind            = %s\n", elf_symbol_bind_to_name(bind));
+                cprintf("  visibility      = %s\n", elf_symbol_visibility_to_name(symbol->st_other));
                 cprintf("  shndx           = %hu\n", symbol->st_shndx);
                 cprintf("  section index   = %hu\n", symbol->st_shndx);
                 cprintf("  value           = 0x%08lX\n", symbol->st_value);
@@ -218,9 +215,31 @@ bind_functions(
                 cprintf("  addr from dwarf = %p\n", (void*)addr);
             }
 
-            if (addr != 0) {
-                *((uintptr_t *)symbol->st_value) = addr;
+            // Don't override symbols of non-pointer size.
+            if (symbol->st_size != sizeof(uintptr_t)) {
+                if_cprintf(trace_elf, "  --- not overriding because size != %lu\n", sizeof(uintptr_t));
+                continue;
             }
+
+            if (!(image_start <= symbol->st_value && symbol->st_value < image_end)) {
+                if_cprintf(trace_elf, "  --- not overriding because symbol points to outside of image data\n");
+                continue;
+            }
+
+            uintptr_t *symbol_value_ptr = (uintptr_t *)symbol->st_value;
+
+            if (addr == 0) {
+                if_cprintf(trace_elf, "  --- not overriding because could not find fitting symbol\n");
+                continue;
+            }
+
+            if (*symbol_value_ptr) {
+                if_cprintf(trace_elf, "  --- not overriding because symbol already has non-zero value: 0x%08lX\n", *symbol_value_ptr);
+                continue;
+            }
+
+            *symbol_value_ptr = addr;
+            if_cprintf(trace_elf, "  +++ overriding. new value: 0x%08lX\n", *symbol_value_ptr);
         }
     }
 
@@ -282,30 +301,26 @@ parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedEl
     output->section_strings.data = (char *)(binary + section_name_table->sh_offset);
     output->section_strings.size = section_name_table->sh_size;
 
-    if (trace_elf) {
-        cprintf(
-            "loaded elf section string table. index = %d, addr = %p, size = %lu\n",
-            elf->e_shstrndx, output->section_strings.data, output->section_strings.size
-        );
+    if_cprintf(
+        trace_elf,
+        "loaded elf section string table. index = %d, addr = %p, size = %lu\n",
+        elf->e_shstrndx, output->section_strings.data, output->section_strings.size
+    );
 
-        cprintf(
-            "reading elf section headers. sect_headers_count = %d, sect_headers_file_offset = %lu\n",
-            sect_headers_count, sect_headers_file_offset
-        );
-    }
+    if_cprintf(
+        trace_elf,
+        "reading elf section headers. sect_headers_count = %d, sect_headers_file_offset = %lu\n",
+        sect_headers_count, sect_headers_file_offset
+    );
 
     for (int i = 0; i < sect_headers_count; ++i) {
         const struct Secthdr *section = &sections[i];
         const char *name = output->section_strings.data + section->sh_name;
 
-        if (trace_elf) {
-            cprintf("section header. index = %d, name = %s\n", i, name);
-        }
+        if_cprintf(trace_elf, "section header. index = %d, name = %s\n", i, name);
 
         if (strcmp(name, ".symtab") == 0) {
-            if (trace_elf) {
-                cprintf("  found symbol table\n");
-            }
+            if_cprintf(trace_elf, "  found symbol table\n");
 
             if (section->sh_size % sizeof(struct Elf64_Sym) != 0) {
                 warn(
@@ -318,13 +333,9 @@ parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedEl
             output->symbols.entries = (const struct Elf64_Sym*)(binary + section->sh_offset);
             output->symbols.count = section->sh_size / sizeof(struct Elf64_Sym);
 
-            if (trace_elf) {
-                cprintf("  number of entries = %lu\n", output->symbols.count);
-            }
+            if_cprintf(trace_elf, "  number of entries = %lu\n", output->symbols.count);
         } else if (strcmp(name, ".strtab") == 0) {
-            if (trace_elf) {
-                cprintf("  found symbol string table\n");
-            }
+            if_cprintf(trace_elf, "  found symbol string table\n");
 
             output->symbol_strings.data = (char *)(binary + section->sh_offset);
             output->symbol_strings.size = section->sh_size;
@@ -378,9 +389,7 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
-    if (trace_elf) {
-        cprintf("loading elf for env with id = %d\n", env->env_id);
-    }
+    if_cprintf(trace_elf, "loading elf for env with id = %d\n", env->env_id);
 
     struct Elf *elf = (struct Elf*)binary;
 
@@ -411,25 +420,30 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 
     struct Proghdr *prog_headers = (struct Proghdr *)(binary + prog_headers_file_offset);
 
-    if (trace_elf) {
-        cprintf(
-            "reading elf program headers. prog_headers_count = %d, prog_headers_file_offset = %lu\n",
-            prog_headers_count, prog_headers_file_offset
-        );
-    }
+    if_cprintf(
+        trace_elf,
+        "reading elf program headers. prog_headers_count = %d, prog_headers_file_offset = %lu\n",
+        prog_headers_count, prog_headers_file_offset
+    );
+
+    // TODO(e-kutovoi): Assuming image is laid out continuously
+    uintptr_t image_start = 0;
+    uintptr_t image_end = 0;
 
     for (int i = 0; i < prog_headers_count; ++i) {
         struct Proghdr *prog_header = &prog_headers[i];
 
         if (trace_elf) {
-            cprintf("program header. index = %d, type = 0x%04X\n", i, prog_header->p_type);
-            cprintf("  p_offset = 0x%08lX\n", prog_header->p_offset);
-            cprintf("  p_va     = 0x%08lX\n", prog_header->p_va);
-            cprintf("  p_pa     = 0x%08lX\n", prog_header->p_pa);
-            cprintf("  p_filesz = 0x%08lX\n", prog_header->p_filesz);
-            cprintf("  p_memsz  = 0x%08lX\n", prog_header->p_memsz);
-            cprintf("  p_flags  = 0x%08X\n", prog_header->p_flags);
-            cprintf("  p_align  = 0x%08lX\n", prog_header->p_align);
+            cprintf("program header. index = %d\n", i);
+            cprintf("  type      = %s\n", elf_prog_header_type_to_name(prog_header->p_type));
+            cprintf("  type(int) = 0x%04X\n", prog_header->p_type);
+            cprintf("  p_offset  = 0x%08lX\n", prog_header->p_offset);
+            cprintf("  p_va      = 0x%08lX\n", prog_header->p_va);
+            cprintf("  p_pa      = 0x%08lX\n", prog_header->p_pa);
+            cprintf("  p_filesz  = 0x%08lX\n", prog_header->p_filesz);
+            cprintf("  p_memsz   = 0x%08lX\n", prog_header->p_memsz);
+            cprintf("  p_flags   = 0x%08X\n", prog_header->p_flags);
+            cprintf("  p_align   = 0x%08lX\n", prog_header->p_align);
         }
 
         if (prog_header->p_filesz > prog_header->p_memsz) {
@@ -438,6 +452,14 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         }
 
         if (prog_header->p_type == PT_LOAD) {
+            if (image_start == 0 || prog_header->p_va < image_start) {
+                image_start = prog_header->p_va;
+            }
+
+            if (image_end == 0 || image_end < prog_header->p_va + prog_header->p_memsz) {
+                image_end = prog_header->p_va + prog_header->p_memsz;
+            }
+
             uint8_t *copy_src = binary + prog_header->p_offset;
             uint8_t *copy_dst = (uint8_t *)(prog_header->p_va);
             uint64_t copy_size = prog_header->p_filesz;
@@ -445,34 +467,34 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             uint8_t *zero_dst = copy_dst + copy_size;
             uint64_t zero_size = prog_header->p_memsz - prog_header->p_filesz;
 
-            if (trace_elf) {
-                cprintf(
-                    "loading program header into memory\n"
-                    "  copy_src = %p, copy_dst = %p, copy_size = %lx\n"
-                    "  zero_dst = %p, zero_size = %lx\n",
-                    copy_src, copy_dst, copy_size,
-                    zero_dst, zero_size
-                );
-            }
+            if_cprintf(
+                trace_elf,
+                "  +++ loading program header into memory\n"
+                "    copy_src = %p, copy_dst = %p, copy_size = %lx\n"
+                "    zero_dst = %p, zero_size = %lx\n",
+                copy_src, copy_dst, copy_size,
+                zero_dst, zero_size
+            );
 
             memcpy(copy_dst, copy_src, copy_size);
             memset(zero_dst, 0, zero_size);
         }
     }
 
-    if (trace_elf) {
-        cprintf("setting entry point to env = %lx\n", elf->e_entry);
-        cprintf("setting flags to env = %x\n", elf->e_flags);
-    }
+    if_cprintf(trace_elf, "determined image loaded region: [0x%08lX : 0x%08lX]\n", image_start, image_end);
+
+    // Either both set (normal case), or both unset (edge case - no loadable segments, not impossible?)
+    assert((image_start == 0) == (image_start == 0));
+
+    if_cprintf(trace_elf, "setting entry point to env = %lx\n", elf->e_entry);
+    if_cprintf(trace_elf, "setting flags to env = %x\n", elf->e_flags);
 
     env->env_tf.tf_rip = elf->e_entry;
     env->env_tf.tf_rflags = elf->e_flags;
 
-    if (trace_elf) {
-        cprintf("binding functions for env\n");
-    }
+    if_cprintf(trace_elf, "binding functions for env\n");
 
-    bind_functions(env, elf, 0, 0, &parsed_sections);
+    bind_functions(env, elf, image_start, image_end, &parsed_sections);
 
     return 0;
 }

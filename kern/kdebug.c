@@ -19,7 +19,7 @@ load_kernel_symbol_info(struct ParsedElfSymbolSection *symbols, struct ParsedElf
     strings->data = (const char *)uefi_lp->StringTableStart;
     strings->size = (uint64_t)(uefi_lp->StringTableEnd - uefi_lp->StringTableStart);
 
-    if (trace_elf) {
+    if (trace_elf_kdebug) {
         cprintf("loaded kernel symbol info\n");
         cprintf("  symbols->entries = %p\n", symbols->entries);
         cprintf("  symbols->count   = %lu\n", symbols->count);
@@ -133,23 +133,22 @@ symbol_table_address_by_fname(const char *const target_name, uintptr_t *addr) {
     struct ParsedElfStringSection strings;
     load_kernel_symbol_info(&symbols, &strings);
 
-    if (trace_elf) {
-        cprintf("parsing kernel symbol table\n");
-    }
+    if_cprintf(trace_elf_kdebug, "parsing kernel symbol table\n");
 
     for (uint64_t i = 0; i < symbols.count; ++i) {
         const struct Elf64_Sym *symbol = &symbols.entries[i];
 
         const char *name = strings.data + symbol->st_name;
         uint8_t type = ELF_ST_TYPE(symbol->st_info);
+        uint8_t bind = ELF_ST_BIND(symbol->st_info);
 
         if ((type == STT_OBJECT || type == STT_FUNC) && strcmp(name, target_name) == 0) {
-            if (trace_elf) {
+            if (trace_elf_kdebug) {
                 cprintf("reading kernel symbol at index = %lu\n", i);
                 cprintf("  name            = %s\n", name);
-                cprintf("  info            = %hhx\n", symbol->st_info);
-                cprintf("  type            = %s\n", elf_symbol_type_to_name[type]);
-                cprintf("  other           = %hhx\n", symbol->st_other);
+                cprintf("  type            = %s\n", elf_symbol_type_to_name(type));
+                cprintf("  bind            = %s\n", elf_symbol_bind_to_name(bind));
+                cprintf("  visibility      = %s\n", elf_symbol_visibility_to_name(symbol->st_other));
                 cprintf("  shndx           = %hu\n", symbol->st_shndx);
                 cprintf("  section index   = %hu\n", symbol->st_shndx);
                 cprintf("  value           = 0x%08lX\n", symbol->st_value);
@@ -195,7 +194,7 @@ find_function(const char *const fname) {
     }
 
     if (symbol_table_result < 0 && dwarf_pubnames_result < 0 && dwarf_naive_result < 0) {
-        if (trace_elf) {
+        if (trace_elf_kdebug) {
             warn(
                 "failed to find function with name '%s' in debug symbols"
                 ". symbol table error = %i, pubnames error = %i, naive error = %i",
