@@ -10,6 +10,9 @@
 
 .globl entry
 entry:
+    # Entering kernel code, disable interrupts
+    cli
+
     # Set up kernel stack
     leaq bootstacktop(%rip),%rsp
     xor %ebp, %ebp
@@ -26,6 +29,9 @@ entry:
 
 .global save_trapframe_trap
 save_trapframe_trap:
+    # Entering kernel code, disable interrupts
+    cli
+
     popq save_trapframe_ret(%rip)
     popq saved_rip(%rip)
     popq saved_cs(%rip)
@@ -65,6 +71,7 @@ save_trapframe:
 .globl sys_yield
 .type  sys_yield, @function
 sys_yield:
+    # Entering kernel code, disable interrupts
     cli
     call save_trapframe_syscall
     call csys_yield
@@ -74,6 +81,7 @@ sys_yield:
 .globl sys_exit
 .type  sys_exit, @function
 sys_exit:
+    # Entering kernel code, disable interrupts
     cli
     leaq bootstacktop(%rip), %rsp
     xor %ebp, %ebp
