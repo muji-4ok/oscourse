@@ -29,6 +29,7 @@ int mon_dumpcmos(int argc, char **argv, struct Trapframe *tf);
 int mon_start(int argc, char **argv, struct Trapframe *tf);
 int mon_stop(int argc, char **argv, struct Trapframe *tf);
 int mon_frequency(int argc, char **argv, struct Trapframe *tf);
+int mon_timer_list(int argc, char **argv, struct Trapframe *tf);
 
 struct Command {
     const char *name;
@@ -46,6 +47,7 @@ static struct Command commands[] = {
         {"timer_start", "Start timer", mon_start},
         {"timer_stop", "Stop timer", mon_stop},
         {"timer_freq", "Get timer frequency", mon_frequency},
+        {"timer_list", "Get list of available timers", mon_timer_list},
 };
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
 
@@ -120,16 +122,56 @@ mon_sample(int argc, char **argv, struct Trapframe *tf) {
 
 int
 mon_start(int argc, char **argv, struct Trapframe *tf) {
+    if (argc != 2) {
+        cprintf("Expected 1 argument. Call expression:\n");
+        cprintf("  timer_freq <name_of_timer>\n");
+        return 0;
+    }
+
+    timer_start(argv[1]);
+
     return 0;
 }
 
 int
 mon_stop(int argc, char **argv, struct Trapframe *tf) {
+    timer_stop();
     return 0;
 }
 
 int
 mon_frequency(int argc, char **argv, struct Trapframe *tf) {
+    if (argc != 2) {
+        cprintf("Expected 1 argument. Call expression:\n");
+        cprintf("  timer_freq <name_of_timer>\n");
+        return 0;
+    }
+
+    timer_cpu_frequency(argv[1]);
+
+    return 0;
+}
+
+static const char *
+timer_func_enabled_str(void *f) {
+    if (f == NULL) {
+        return "disabled";
+    } else {
+        return "enabled";
+    }
+}
+
+int
+mon_timer_list(int argc, char **argv, struct Trapframe *tf) {
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        const char *name = timertab[i].timer_name;
+
+        cprintf("Timer[%d]:\n", i);
+        cprintf("  name:       %s\n", name != NULL ? name : "<broken>");
+        cprintf("  interrupts: %s\n", timer_func_enabled_str(timertab[i].enable_interrupts));
+        cprintf("  cpu_freq:   %s\n", timer_func_enabled_str(timertab[i].get_cpu_freq));
+    }
+
     return 0;
 }
 

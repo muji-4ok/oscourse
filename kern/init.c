@@ -153,16 +153,16 @@ i386_init(void) {
     env_init();
 
     /* Choose the timer used for scheduling: hpet or pit */
-    timers_schedule("hpet0");
+    timers_schedule("rtc");
 
 #ifdef CONFIG_KSPACE
     /* Touch all you want */
     ENV_CREATE_KERNEL_TYPE(prog_test1);
     ENV_CREATE_KERNEL_TYPE(prog_test2);
     ENV_CREATE_KERNEL_TYPE(prog_test3);
-    ENV_CREATE_KERNEL_TYPE(prog_test4);
-    ENV_CREATE_KERNEL_TYPE(prog_test5);
-    ENV_CREATE_KERNEL_TYPE(prog_test6);
+    // ENV_CREATE_KERNEL_TYPE(prog_test4);
+    // ENV_CREATE_KERNEL_TYPE(prog_test5);
+    // ENV_CREATE_KERNEL_TYPE(prog_test6);
 #else
 
 #if LAB >= 10

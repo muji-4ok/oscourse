@@ -43,7 +43,7 @@
 #endif
 
 #ifndef trace_spinlock
-#define trace_spinlock 0
+#define trace_spinlock 1
 #endif
 
 #ifndef trace_init
@@ -56,6 +56,10 @@
 
 #ifndef trace_elf_kdebug
 #define trace_elf_kdebug 0
+#endif
+
+#ifndef trace_acpi
+#define trace_acpi 0
 #endif
 
 #endif

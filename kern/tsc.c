@@ -3,6 +3,7 @@
 #include <inc/x86.h>
 #include <inc/stdio.h>
 #include <inc/string.h>
+#include <inc/assert.h>
 
 #include <kern/tsc.h>
 #include <kern/timer.h>
@@ -193,23 +194,96 @@ print_timer_error(void) {
 
 // LAB 5: Your code here:
 
-static bool timer_started = 0;
-static int timer_id = -1;
-static uint64_t timer = 0;
-static uint64_t freq = 0;
+static struct Timer*
+get_timer_by_name(const char *name) {
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (strcmp(name, timertab[i].timer_name) == 0) {
+            return &timertab[i];
+        }
+    }
+
+    return NULL;
+}
+
+static struct Timer*
+get_checked_freq_timer(const char *name) {
+    struct Timer *timer = get_timer_by_name(name);
+
+    if (timer == NULL) {
+        // cprintf("Could not find timer with name '%s'\n", name);
+        print_timer_error();
+        return NULL;
+    }
+
+    if (timer->get_cpu_freq == NULL) {
+        // cprintf("Timer '%s' does not support cpu frequency calculation\n", name);
+        print_timer_error();
+        return NULL;
+    }
+
+    return timer;
+}
+
+static bool timer_started = false;
+static uint64_t start_tsc = 0;
+static struct Timer *timer_in_use = NULL;
 
 void
 timer_start(const char *name) {
-    (void)timer_started;
-    (void)timer_id;
-    (void)timer;
-    (void)freq;
+    struct Timer *timer = get_checked_freq_timer(name);
+
+    if (timer == NULL) {
+        return;
+    }
+    
+    timer_started = true;
+    timer_in_use = timer;
+
+    start_tsc = read_tsc();
 }
 
 void
 timer_stop(void) {
+    if (!timer_started) {
+        // cprintf("Timer not started, can not stop\n");
+        print_timer_error();
+        return;
+    }
+
+    assert(timer_in_use != NULL);
+
+    uint64_t stop_tsc = read_tsc();
+
+    uint64_t frequency = timer_in_use->get_cpu_freq();
+
+    if (frequency == 0) {
+        // cprintf("Frequency reported as 0, aborting calculations\n");
+        print_timer_error();
+
+        timer_started = false;
+        timer_in_use = NULL;
+
+        return;
+    }
+
+    uint64_t cycles_passed = stop_tsc - start_tsc;
+    uint64_t seconds_passed = cycles_passed / frequency;
+
+    cprintf("%lu\n", seconds_passed);
+
+    timer_started = false;
+    timer_in_use = NULL;
 }
 
 void
 timer_cpu_frequency(const char *name) {
+    struct Timer *timer = get_checked_freq_timer(name);
+
+    if (timer == NULL) {
+        return;
+    }
+
+    uint64_t frequency = timer->get_cpu_freq();
+
+    cprintf("%lu\n", frequency);
 }
