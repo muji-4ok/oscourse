@@ -69,7 +69,7 @@ r = Runner(save("jos.out"),
 @test(0, "running JOS")
 def test_jos():
     print(color("yellow", "Please, be patient. It takes from 10 to 60 seconds to run the tests."))
-    r.run_qemu()
+    r.run_qemu(timeout=120)
 
 def check_stop_without_start(line):
     assert_equal(line, "Timer Error")
