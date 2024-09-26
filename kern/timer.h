@@ -60,6 +60,11 @@ typedef struct {
 } RSDT;
 
 typedef struct {
+    ACPISDTHeader h;
+    uint64_t PointerToOtherSDT[];
+} XSDT;
+
+typedef struct {
     uint8_t address_space_id;
     uint8_t register_bit_width;
     uint8_t register_bit_offset;
@@ -186,7 +191,7 @@ uint64_t hpet_cpu_frequency(void);
 void hpet_handle_interrupts_tim0(void);
 void hpet_handle_interrupts_tim1(void);
 
-uint32_t pmtimer_get_timeval(void);
+uint64_t pmtimer_get_timeval(void);
 uint64_t pmtimer_cpu_frequency(void);
 
 #define PM_FREQ 3579545

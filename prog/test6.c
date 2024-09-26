@@ -36,6 +36,7 @@ test_rec(void) {
 
 void
 umain(int argc, char **argv) {
+    cprintf("TEST6 LOADED.\n");
     rand_init(5);
     for (;;) {
         test_rec();
