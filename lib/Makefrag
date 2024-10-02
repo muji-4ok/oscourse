@@ -8,14 +8,18 @@ LIB_SRCFILES :=		lib/libmain.c \
 LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/lib/%.o, $(LIB_SRCFILES))
 LIB_OBJFILES := $(patsubst lib/%.S, $(OBJDIR)/lib/%.o, $(LIB_OBJFILES))
 
+# MY_FLAGS = -Ddebug=0 -fno-builtin -I. -MD -Ofast -flto -ffreestanding -fno-omit-frame-pointer -mno-red-zone -Wall -Wformat=2 -Wno-unused-function -Werror -g -gpubnames -gdwarf-4 -fno-stack-protector  -Wno-unused-but-set-variable -mno-sse -mno-sse2 -mno-mmx -DLAB=3 -mcmodel=large -m64 -DCONFIG_KSPACE -DJOS_PROG
+
 $(OBJDIR)/lib/%.o: lib/%.c $(OBJDIR)/.vars.USER_CFLAGS
 	@echo + cc[USER] $<
 	@mkdir -p $(@D)
+	# $(V)$(CC) $(MY_CFLAGS) -c -o $@ $<
 	$(V)$(CC) $(USER_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/lib/%.o: lib/%.S $(OBJDIR)/.vars.USER_CFLAGS
 	@echo + as[USER] $<
 	@mkdir -p $(@D)
+	# $(V)$(CC) $(MY_CFLAGS) -c -o $@ $<
 	$(V)$(CC) $(USER_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/lib/libjos.a: $(LIB_OBJFILES)

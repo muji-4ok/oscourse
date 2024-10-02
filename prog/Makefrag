@@ -4,9 +4,12 @@ PROGLIBS = jos
 
 .SECONDARY: $(patsubst %, %.ld, $(KERN_BINFILES)) $(patsubst %_out, %, $(KERN_BINFILES))
 
+# MY_FLAGS = -Ddebug=0 -fno-builtin -I. -MD -Ofast -flto -ffreestanding -fno-omit-frame-pointer -mno-red-zone -Wall -Wformat=2 -Wno-unused-function -Werror -g -gpubnames -gdwarf-4 -fno-stack-protector  -Wno-unused-but-set-variable -mno-sse -mno-sse2 -mno-mmx -DLAB=3 -mcmodel=large -m64 -DCONFIG_KSPACE -DJOS_PROG
+
 $(OBJDIR)/prog/%.o: prog/%.c $(OBJDIR)/.vars.USER_CFLAGS
 	@echo + cc[PROG] $<
 	@mkdir -p $(@D)
+	# $(V)$(CC) $(MY_CFLAGS) -c -o $@ $<
 	$(V)$(CC) $(USER_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/prog/%.ld: prog/prog.ld
@@ -16,6 +19,7 @@ $(OBJDIR)/prog/%.ld: prog/prog.ld
 
 $(OBJDIR)/prog/%: $(OBJDIR)/prog/%.o $(OBJDIR)/prog/%.ld $(OBJDIR)/lib/entry.o $(PROGLIBS:%=$(OBJDIR)/lib/lib%.a)
 	@echo + ld $@
+	# $(V)$(LD) -o $@ -T $@.ld $(LDFLAGS) -flto -O5 -nostdlib $(OBJDIR)/lib/entry.o $@.o -L$(OBJDIR)/lib $(PROGLIBS:%=-l%) $(GCC_LIB)
 	$(V)$(LD) -o $@ -T $@.ld $(LDFLAGS) -nostdlib $(OBJDIR)/lib/entry.o $@.o -L$(OBJDIR)/lib $(PROGLIBS:%=-l%) $(GCC_LIB)
 	$(V)$(OBJDUMP) -S $@ > $@.asm
 	$(V)$(NM) -n $@ > $@.sym
@@ -26,4 +30,5 @@ $(OBJDIR)/prog/%_out.S: $(OBJDIR)/prog/%
 
 $(OBJDIR)/prog/%_out: $(OBJDIR)/prog/%_out.S
 	@echo + build $@
+	# $(V)$(CC) $(MY_CFLAGS) -c -o $@ $<
 	$(V)$(CC) $(USER_CFLAGS) -c -o $@ $<
