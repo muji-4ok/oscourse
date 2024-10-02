@@ -26,7 +26,15 @@ sched_yield(void) {
 
     // LAB 3: Your code here:
     if (curenv == NULL) {
-        env_run(&envs[0]);
+        for (int i = 0; i < NENV; ++i) {
+            if (envs[i].env_status == ENV_RUNNABLE) {
+                env_run(&envs[i]);
+            }
+        }
+
+        // Should not get here
+        cprintf("Halt, no envs to start from\n");
+        sched_halt();
     }
 
     int cur_index = curenv->env_id % NENV;
