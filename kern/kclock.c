@@ -31,7 +31,7 @@ cmos_read8(uint8_t reg) {
     uint8_t res = inb(CMOS_DATA);
 
     // Unlock NMI
-    nmi_enable();
+    outb(CMOS_CMD, reg & ~CMOS_NMI_LOCK);
 
     return res;
 }
@@ -47,7 +47,7 @@ cmos_write8(uint8_t reg, uint8_t value) {
     outb(CMOS_DATA, value);
 
     // Unlock NMI
-    nmi_enable();
+    outb(CMOS_CMD, reg & ~CMOS_NMI_LOCK);
 }
 
 uint16_t
