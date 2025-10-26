@@ -495,7 +495,7 @@ void
 dump_memory_lists(void) {
     // LAB 6: Your code here
     for (int class = MAX_CLASS - 1; class >= 0; --class) {
-        cprintf("[class = %d, size = %llu]:\n", class, CLASS_SIZE(class));
+        cprintf("[class = %d, size = 0x%llx]:\n", class, CLASS_SIZE(class));
 
         if (list_empty(&free_classes[class])) {
             cprintf("  --empty--\n");
@@ -503,7 +503,7 @@ dump_memory_lists(void) {
         }
 
         struct List *start = &free_classes[class];
-        struct List *cur = start;
+        struct List *cur = start->next;
         int index = 0;
 
         do {
