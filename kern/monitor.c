@@ -195,7 +195,19 @@ mon_memory(int argc, char **argv, struct Trapframe *tf) {
 int
 mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
     // LAB 7: Your code here
-    dump_page_table(KADDR(rcr3()));
+    int to_level = 1;
+
+    if (argc == 2) {
+        char *to_level_str = argv[1];
+        to_level = strtol(to_level_str, NULL, 10);
+
+        if (to_level < 1 || to_level > 4) {
+            cprintf("Invalid min level given. Should be between 1 and 4\n");
+            return 0;
+        }
+    }
+
+    dump_page_table(KADDR(rcr3()), to_level);
     return 0;
 }
 

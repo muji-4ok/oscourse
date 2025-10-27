@@ -17,6 +17,14 @@
 #define trace_memory 0
 #endif
 
+#if trace_memory
+#define trace_phys_map 1
+#endif
+
+#ifndef trace_phys_map
+#define trace_phys_map 1
+#endif
+
 #ifndef trace_memory_more
 #define trace_memory_more 0
 #endif

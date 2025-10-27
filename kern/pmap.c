@@ -556,12 +556,13 @@ prot2pte(int flags) {
  * isz indicates if given entry is a leaf node
  */
 inline static void
-dump_entry(pte_t base, size_t step, bool isz) {
-    cprintf("%s[%08llX, %08llX] %c%c%c%c%c -- step=0x%zx\n",
+dump_entry(pte_t base, size_t step, bool isz, int index) {
+    cprintf("%s(%d)[%08llX, %08llX] %c%c%c%c%c -- step=0x%zx\n",
             step == 4 * KB ? " >    >    >    >" :
             step == 2 * MB ? " >    >    >" :
             step == 1 * GB ? " >    >" :
                              " >",
+            index,
             PTE_ADDR(base),
             PTE_ADDR(base) + (isz ? (step * isz - 1) : 0xFFF),
             base & PTE_P ? 'P' : '-',
@@ -717,8 +718,12 @@ dump_memory_lists(void) {
 }
 
 static void 
-dump_pt(pte_t* pt, int level)
+dump_pt(pte_t* pt, int level, int to_level)
 {
+    if (level < to_level) {
+        return;
+    }
+
     size_t step;
     size_t count;
 
@@ -754,14 +759,14 @@ dump_pt(pte_t* pt, int level)
         }
 
         if ((level == 3 || level == 2) && (pt[i] & PTE_PS)) {
-            dump_entry(pt[i], step, true);
+            dump_entry(pt[i], step, true, i);
             continue;
         }
 
-        dump_entry(pt[i], step, level == 1);
+        dump_entry(pt[i], step, level == 1, i);
 
         if (level > 1) {
-            dump_pt(KADDR(PTE_ADDR(pt[i])), level - 1);
+            dump_pt(KADDR(PTE_ADDR(pt[i])), level - 1, to_level);
         }
     }
 }
@@ -774,10 +779,10 @@ dump_pt(pte_t* pt, int level)
  * NOTE: Don't forget about PTE_PS
  */
 void
-dump_page_table(pte_t *pml4) {
+dump_page_table(pte_t *pml4, int to_level) {
     cprintf("Page table:\n");
     // LAB 7: Your code here
-    dump_pt(pml4, 4);
+    dump_pt(pml4, 4, to_level);
 }
 
 inline static int
@@ -839,7 +844,7 @@ alloc_fill_pt(pte_t *dst, pte_t base, size_t step, size_t i0, size_t i1) {
     if (!need_recur && step != 4 * KB) base |= PTE_PS;
 
     if (trace_memory_more)
-        dump_entry(base, step, i1 - i0);
+        dump_entry(base, step, i1 - i0, -1);
 
     for (size_t i = i0; i < i1; i++, base += step) {
         if (need_recur) {
@@ -1272,8 +1277,12 @@ addr_common_class(uintptr_t addr1, uintptr_t addr2) {
 
 int
 map_physical_region(struct AddressSpace *dst, uintptr_t dstart, uintptr_t pstart, size_t size, int flags) {
-    if (trace_memory) cprintf("Mapping physical region [%08lX, %08lX] to [%08lX, %08lX] (flags=%x)\n",
-                              pstart, pstart + (long)size - 1, dstart, dstart + (long)size - 1, flags);
+    if (trace_phys_map) {
+        cprintf(
+            "Mapping physical region [%08lX, %08lX] to [%08lX, %08lX] (flags=%x)\n",
+            pstart, pstart + (long)size - 1, dstart, dstart + (long)size - 1, flags
+        );
+    }
     assert(dstart > MAX_USER_ADDRESS || dst == &kspace || (flags & MAP_USER_MMIO && dstart <= MAX_USER_ADDRESS && dst != &kspace));
 
     int class = 0, res;
@@ -1688,6 +1697,13 @@ detect_memory(void) {
                 type = RESERVED_NODE;
             }
 
+            if (trace_init) {
+                cprintf(
+                    "UEFI phys mem region: start = %p, size = 0x%lx, type = %u\n",
+                    (void*)start->PhysicalStart, region_size, start->Type
+                );
+            }
+
             max_memory_map_addr = MAX(region_size + start->PhysicalStart, max_memory_map_addr);
 
             /* Attach memory described by memory map entry described by start
@@ -1905,6 +1921,7 @@ init_memory(void) {
     // NOTE: You need to check if map_physical_region returned 0 everywhere! (and panic otherwise)
     // Map [0, max_memory_map_addr] to [KERN_BASE_ADDR, KERN_BASE_ADDR + max_memory_map_addr] as RW- + ALLOC_WEAK
 
+    if (trace_init) cprintf("Mapping total physical memory\n");
     res = map_physical_region(&kspace, KERN_BASE_ADDR, 0, max_memory_map_addr, PROT_R | PROT_W | ALLOC_WEAK);
     if (res < 0) {
         panic("Failed to map total physical memory weakly");
@@ -1921,6 +1938,7 @@ init_memory(void) {
     assert((uintptr_t)(end - KERN_BASE_ADDR) < MIN(BOOT_MEM_SIZE, max_memory_map_addr));
 
     // WARN: hint above is incorrect, we need R-X
+    if (trace_init) cprintf("Mapping kernel text section\n");
     res = map_physical_region(&kspace, (uintptr_t)__text_start, PADDR(__text_start), __text_end - __text_start, PROT_R | PROT_X);
     if (res < 0) {
         panic("Failed to map kernel text section");
@@ -1932,11 +1950,13 @@ init_memory(void) {
     // Map [PADDR(bootstack), PADDR(bootstack) + KERN_STACK_SIZE] to [KERN_STACK_TOP - KERN_STACK_SIZE, KERN_STACK_TOP] as RW-
     // Map [PADDR(pfstack), PADDR(pfstack) + KERN_PF_STACK_SIZE] to [KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE, KERN_PF_STACK_TOP] as RW-
 
+    if (trace_init) cprintf("Mapping kernel boot stack\n");
     res = map_physical_region(&kspace, KERN_STACK_TOP - KERN_STACK_SIZE, PADDR(bootstack), KERN_STACK_SIZE, PROT_R | PROT_W);
     if (res < 0) {
         panic("Failed to map kernel boot stack");
     }
 
+    if (trace_init) cprintf("Mapping kernel pagefault stack\n");
     res = map_physical_region(&kspace, KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE, PADDR(pfstack), KERN_PF_STACK_SIZE, PROT_R | PROT_W);
     if (res < 0) {
         panic("Failed to map kernel pagefault stack");
@@ -1946,6 +1966,8 @@ init_memory(void) {
     init_shadow_pre();
 #endif
 
+    int uefi_region_index = 0;
+
     EFI_MEMORY_DESCRIPTOR *mstart = (void *)uefi_lp->MemoryMap;
     EFI_MEMORY_DESCRIPTOR *mend = (void *)((uint8_t *)mstart + uefi_lp->MemoryMapSize);
     for (; mstart < mend; mstart = (void *)((uint8_t *)mstart + uefi_lp->MemoryMapDescriptorSize)) {
@@ -1954,12 +1976,17 @@ init_memory(void) {
             // Map [mstart->PhysicalStart, mstart->PhysicalStart+mstart->NumberOfPages*PAGE_SIZE] to
             //     [mstart->VirtualStart, mstart->VirtualStart+mstart->NumberOfPages*PAGE_SIZE] as RW-
             size_t size = mstart->NumberOfPages * PAGE_SIZE;
+
+            if (trace_init) {
+                cprintf("Mapping UEFI memory map region #%d\n", uefi_region_index++);
+            }
+
             res = map_physical_region(
                 &kspace, mstart->VirtualStart, mstart->PhysicalStart, size, PROT_R | PROT_W
             );
             if (res < 0) {
                 panic(
-                    "Failed to map physical region. phys = %p, virt = %p, size = %016lx",
+                    "Failed to map physical region. phys = %p, virt = %p, size = %lx",
                     (void*)mstart->PhysicalStart, (void*)mstart->VirtualStart, size
                 );
             }
@@ -2029,46 +2056,51 @@ init_memory(void) {
     // Map [X86ADDR(KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE), KERN_PF_STACK_TOP] to
     //     [PADDR(pfstack), PADDR(pfstacktop)] as RW-
 
+    if (trace_init) cprintf("Mapping framebuffer memory\n");
     res = map_physical_region(&kspace, FRAMEBUFFER, uefi_lp->FrameBufferBase, uefi_lp->FrameBufferSize, PROT_R | PROT_W | PROT_WC);
     if (res < 0) {
         panic("Failed to map framebuffer memory");
     }
     
+    if (trace_init) cprintf("Mapping total physical memory (32bit)\n");
     res = map_physical_region(
         &kspace, X86ADDR(KERN_BASE_ADDR), 0, MIN(MAX_LOW_ADDR_KERN_SIZE, max_memory_map_addr), PROT_R | PROT_W | ALLOC_WEAK
     );
     if (res < 0) {
-        panic("Failed to map 32bit memory weakly");
+        panic("Failed to map total physical memory weakly (32bit)");
     }
 
+    if (trace_init) cprintf("Mapping kernel text section (32bit)\n");
     res = map_physical_region(
         &kspace, X86ADDR((uintptr_t)__text_start), PADDR(__text_start), 
         ROUNDUP(X86ADDR((uintptr_t)__text_end), CLASS_SIZE(0)) - X86ADDR((uintptr_t)__text_start), 
         PROT_R | PROT_X
     );
     if (res < 0) {
-        panic("Failed to map 32bit kernel text section");
+        panic("Failed to map kernel text section (32bit)");
     }
 
+    if (trace_init) cprintf("Mapping kernel boot stack (32bit)\n");
     res = map_physical_region(
         &kspace, X86ADDR(KERN_STACK_TOP - KERN_STACK_SIZE), PADDR(bootstack), 
         KERN_STACK_SIZE,
         PROT_R | PROT_W
     );
     if (res < 0) {
-        panic("Failed to map 32bit kernel boot stack");
+        panic("Failed to map kernel boot stack (32bit)");
     }
 
+    if (trace_init) cprintf("Mapping kernel pagefault stack (32bit)\n");
     res = map_physical_region(
         &kspace, X86ADDR(KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE), PADDR(pfstack), 
         KERN_PF_STACK_SIZE,
         PROT_R | PROT_W
     );
     if (res < 0) {
-        panic("Failed to map 32bit kernel pagefault stack");
+        panic("Failed to map kernel pagefault stack (32bit)");
     }
 
-    if (trace_memory_more) dump_page_table(kspace.pml4);
+    if (trace_memory_more) dump_page_table(kspace.pml4, 3);
 
     check_physical_tree(&root);
     if (trace_init) cprintf("Physical memory tree is still correct\n");
