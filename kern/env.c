@@ -94,10 +94,22 @@ env_init(void) {
      * Don't forget about rounding.
      * kzalloc_region() only works with current_space != NULL */
     // LAB 8: Your code here
+    size_t envs_size_bytes = ROUNDUP(sizeof(struct Env) * NENV, PAGE_SIZE);
+    assert(envs_size_bytes <= UENVS_SIZE);
+
+    struct Env *envs_mem = kzalloc_region(envs_size_bytes);
+    assert(envs_mem != NULL);
 
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
+    int res = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs_mem, envs_size_bytes, PROT_R | PROT_USER_);
+
+    if (res < 0) {
+        panic("env_init() failed: map_region() returned: %i", res);
+    }
+
+    envs = envs_mem;
 
     /* Set up envs array */
 
@@ -177,8 +189,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     uint32_t index = env->env_id % NENV;
     env->env_tf.tf_rsp = stack_top - PAGE_SIZE * 2 * index;
 
-    if_cprintf(trace_elf, "[%08x] setting rsp = %p, index = %u, nenv = %d\n", env->env_id, (void*)env->env_tf.tf_rsp, index, NENV);
+    if_cprintf(trace_elf, "[%08x] setting rsp = %p, index = %u, nenv = %d\n", env->env_id, (void *)env->env_tf.tf_rsp, index, NENV);
 #else
+    // 3 here sets RPL to level 3
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
     env->env_tf.tf_ss = GD_UD | 3;
@@ -187,7 +200,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 #endif
 
     /* For now init trapframe with IF set */
-    env->env_tf.tf_rflags = FL_IF;
+    // --- Not longer true
+    // env->env_tf.tf_rflags = FL_IF;
 
     /* Commit the allocation */
     env_free_list = env->env_link;
@@ -204,8 +218,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
  */
 static int
 bind_functions(
-    struct Env *env, struct Elf *elf, uintptr_t image_start, uintptr_t image_end, struct ParsedElfSections *parsed_sections
-) {
+        struct Env *env, struct Elf *elf, uintptr_t image_start, uintptr_t image_end, struct ParsedElfSections *parsed_sections) {
     // LAB 3: Your code here:
 
     /* NOTE: find_function from kdebug.c should be used */
@@ -232,7 +245,7 @@ bind_functions(
                 cprintf("  section index   = %hu\n", symbol->st_shndx);
                 cprintf("  value           = 0x%08lX\n", symbol->st_value);
                 cprintf("  size            = 0x%08lX\n", symbol->st_size);
-                cprintf("  addr from dwarf = %p\n", (void*)addr);
+                cprintf("  addr from dwarf = %p\n", (void *)addr);
             }
 
             // Don't override symbols of non-pointer size.
@@ -269,34 +282,22 @@ bind_functions(
 static int
 verify_elf(const struct Elf *elf) {
     if (elf->e_magic != ELF_MAGIC) {
-        warn(
-            "elf header magic is invalid. got magic = %04X, expected = %04X",
-            elf->e_magic, ELF_MAGIC
-        );
+        warn("elf header magic is invalid. got magic = %04X, expected = %04X", elf->e_magic, ELF_MAGIC);
         return -E_INVALID_EXE;
     }
 
     if (elf->e_ehsize != sizeof(struct Elf)) {
-        warn(
-            "elf header size mismatch. got size = %hu, expected = %lu",
-            elf->e_ehsize, sizeof(struct Elf)
-        );
+        warn("elf header size mismatch. got size = %hu, expected = %lu", elf->e_ehsize, sizeof(struct Elf));
         return -E_INVALID_EXE;
     }
 
     if (elf->e_machine != EM_X86_64 && elf->e_machine != EM_AMD64) {
-        warn(
-            "elf machine type is not x86/amd64, which is unsupported. machine type = %02X",
-            elf->e_machine
-        );
+        warn("elf machine type is not x86/amd64, which is unsupported. machine type = %02X", elf->e_machine);
         return -E_INVALID_EXE;
     }
 
     if (elf->e_shentsize != sizeof(struct Secthdr)) {
-        warn(
-            "elf section header size mismatch. got size = %hu, expected = %lu",
-            elf->e_shentsize, sizeof(struct Secthdr)
-        );
+        warn("elf section header size mismatch. got size = %hu, expected = %lu", elf->e_shentsize, sizeof(struct Secthdr));
         return -E_INVALID_EXE;
     }
 
@@ -309,7 +310,7 @@ parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedEl
 
     int sect_headers_count = elf->e_shnum;
 
-    const struct Secthdr *sections = (struct Secthdr*)(binary + sect_headers_file_offset);
+    const struct Secthdr *sections = (struct Secthdr *)(binary + sect_headers_file_offset);
 
     if (elf->e_shstrndx >= ET_LOPROC) {
         warn("e_shstrndx >= 0xff00 unsupported. e_shstrndx = %hu", elf->e_shstrndx);
@@ -322,16 +323,14 @@ parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedEl
     output->section_strings.size = section_name_table->sh_size;
 
     if_cprintf(
-        trace_elf,
-        "loaded elf section string table. index = %d, addr = %p, size = %lu\n",
-        elf->e_shstrndx, output->section_strings.data, output->section_strings.size
-    );
+            trace_elf,
+            "loaded elf section string table. index = %d, addr = %p, size = %lu\n",
+            elf->e_shstrndx, output->section_strings.data, output->section_strings.size);
 
     if_cprintf(
-        trace_elf,
-        "reading elf section headers. sect_headers_count = %d, sect_headers_file_offset = %lu\n",
-        sect_headers_count, sect_headers_file_offset
-    );
+            trace_elf,
+            "reading elf section headers. sect_headers_count = %d, sect_headers_file_offset = %lu\n",
+            sect_headers_count, sect_headers_file_offset);
 
     for (int i = 0; i < sect_headers_count; ++i) {
         const struct Secthdr *section = &sections[i];
@@ -343,14 +342,12 @@ parse_elf_sections(const struct Elf *elf, const uint8_t *binary, struct ParsedEl
             if_cprintf(trace_elf, "  found symbol table\n");
 
             if (section->sh_size % sizeof(struct Elf64_Sym) != 0) {
-                warn(
-                    "symbol table size does not divide by Elf64_Sym struct size. table size = %lu, struct size = %lu",
-                    section->sh_size, sizeof(struct Elf64_Sym)
-                );
+                warn("symbol table size does not divide by Elf64_Sym struct size. table size = %lu, struct size = %lu",
+                     section->sh_size, sizeof(struct Elf64_Sym));
                 return -E_INVALID_EXE;
             }
 
-            output->symbols.entries = (const struct Elf64_Sym*)(binary + section->sh_offset);
+            output->symbols.entries = (const struct Elf64_Sym *)(binary + section->sh_offset);
             output->symbols.count = section->sh_size / sizeof(struct Elf64_Sym);
 
             if_cprintf(trace_elf, "  number of entries = %lu\n", output->symbols.count);
@@ -411,10 +408,10 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 
     if_cprintf(trace_elf, "loading elf for env with id = %d\n", env->env_id);
 
-    struct Elf *elf = (struct Elf*)binary;
+    struct Elf *elf = (struct Elf *)binary;
 
     int result = verify_elf(elf);
-    
+
     if (result < 0) {
         warn("verifying elf failed: %i", result);
         return result;
@@ -441,10 +438,9 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     struct Proghdr *prog_headers = (struct Proghdr *)(binary + prog_headers_file_offset);
 
     if_cprintf(
-        trace_elf,
-        "reading elf program headers. prog_headers_count = %d, prog_headers_file_offset = %lu\n",
-        prog_headers_count, prog_headers_file_offset
-    );
+            trace_elf,
+            "reading elf program headers. prog_headers_count = %d, prog_headers_file_offset = %lu\n",
+            prog_headers_count, prog_headers_file_offset);
 
     // TODO(e-kutovoi): Assuming image is laid out continuously
     uintptr_t image_start = 0;
@@ -471,6 +467,18 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             return -E_INVALID_EXE;
         }
 
+        if (prog_header->p_memsz & CLASS_MASK(0)) {
+            warn("program header size not aligned on page size");
+        }
+
+        if (prog_header->p_va & CLASS_MASK(0)) {
+            warn("program header va not aligned on page size");
+        }
+
+        if (prog_header->p_flags > (ELF_PROG_FLAG_EXEC | ELF_PROG_FLAG_WRITE | ELF_PROG_FLAG_READ)) {
+            warn("program header flags have invalid value");
+        }
+
         if (prog_header->p_type == PT_LOAD) {
             if (image_start == 0 || prog_header->p_va < image_start) {
                 image_start = prog_header->p_va;
@@ -479,45 +487,98 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             if (image_end == 0 || image_end < prog_header->p_va + prog_header->p_memsz) {
                 image_end = prog_header->p_va + prog_header->p_memsz;
             }
-
-            uint8_t *copy_src = binary + prog_header->p_offset;
-            uint8_t *copy_dst = (uint8_t *)(prog_header->p_va);
-            uint64_t copy_size = prog_header->p_filesz;
-
-            uint8_t *zero_dst = copy_dst + copy_size;
-            uint64_t zero_size = prog_header->p_memsz - prog_header->p_filesz;
-
-            if_cprintf(
-                trace_elf,
-                "  +++ loading program header into memory\n"
-                "    copy_src = %p, copy_dst = %p, copy_size = %lx\n"
-                "    zero_dst = %p, zero_size = %lx\n",
-                copy_src, copy_dst, copy_size,
-                zero_dst, zero_size
-            );
-
-            memcpy(copy_dst, copy_src, copy_size);
-            memset(zero_dst, 0, zero_size);
+        } else {
+            if_cprintf(trace_elf, "header not loadable\n");
         }
     }
 
     if_cprintf(trace_elf, "determined image loaded region: [0x%08lX : 0x%08lX]\n", image_start, image_end);
 
+    if (image_end >= MAX_USER_ADDRESS) {
+        warn("image region crosses over maximum user address");
+        return -E_INVALID_EXE;
+    }
+
+    if_cprintf(trace_elf, "aligning image loaded region to page boundaries\n");
+    image_start = ROUNDDOWN(image_start, PAGE_SIZE);
+    image_end = ROUNDUP(image_end, PAGE_SIZE);
+
+    if_cprintf(
+            trace_elf,
+            "mapping image region [0x%08lX : 0x%08lX] with zeros in kernel address space\n", image_start, image_end);
+
+    int res = map_region(
+            &kspace, image_start, NULL, 0, image_end - image_start,
+            PROT_RWX | ALLOC_ZERO);
+
+    if (res < 0) {
+        warn("map_region() of zeros failed: err = %i, start = %p, end = %p", res, (void *)image_start, (void *)image_end);
+        return -E_INVALID_EXE;
+    }
+
     // Either both set (normal case), or both unset (edge case - no loadable segments, not impossible?)
     assert((image_start == 0) == (image_start == 0));
+
+    for (int i = 0; i < prog_headers_count; ++i) {
+        struct Proghdr *prog_header = &prog_headers[i];
+
+        if (prog_header->p_type == PT_LOAD) {
+            uint8_t *copy_src = binary + prog_header->p_offset;
+            uint8_t *copy_dst = (uint8_t *)(prog_header->p_va);
+            uint64_t copy_size = prog_header->p_filesz;
+            uint64_t total_size = prog_header->p_memsz;
+            uint32_t flags = prog_header->p_flags;
+
+            if_cprintf(
+                    trace_elf,
+                    "  +++ copying program header into memory\n"
+                    "    copy_src = %p, copy_dst = %p, copy_size = %lx\n"
+                    "    total_size = %lx\n"
+                    "    flags = 0x%x\n",
+                    copy_src, copy_dst, copy_size,
+                    total_size,
+                    flags);
+
+            memcpy(copy_dst, copy_src, copy_size);
+        }
+    }
+
+    if_cprintf(trace_elf, "mapping region from kernel to user address space\n");
+
+    res = map_region(
+            &env->address_space, image_start, &kspace, image_start, image_end - image_start,
+            PROT_RWX | PROT_USER_);
+
+    if (res < 0) {
+        warn("map_region() failed: err = %i, start = %p, end = %p", res, (void *)image_start, (void *)image_end);
+        return -E_INVALID_EXE;
+    }
 
     if_cprintf(trace_elf, "setting entry point to env = %lx\n", elf->e_entry);
     if_cprintf(trace_elf, "setting flags to env = %x\n", elf->e_flags);
 
     env->env_tf.tf_rip = elf->e_entry;
-    // Set in env_alloc
-    // env->env_tf.tf_rflags = elf->e_flags;
+    env->env_tf.tf_rflags = elf->e_flags;
+    env->binary = binary;
 
-    if_cprintf(trace_elf, "binding functions for env\n");
-
-    bind_functions(env, elf, image_start, image_end, &parsed_sections);
+    // TODO: Userspace
+    if (env->env_type == ENV_TYPE_KERNEL) {
+        if_cprintf(trace_elf, "binding functions for env\n");
+        bind_functions(env, elf, image_start, image_end, &parsed_sections);
+    }
 
     // LAB 8: Your code here
+
+    if_cprintf(trace_elf, "mapping user stack at [%p : %p]\n", (void *)(USER_STACK_TOP - USER_STACK_SIZE), (void *)(USER_STACK_TOP));
+
+    res = map_region(
+            &env->address_space, USER_STACK_TOP - USER_STACK_SIZE, NULL, 0, USER_STACK_SIZE,
+            PROT_R | PROT_W | PROT_USER_ | ALLOC_ZERO);
+
+    if (res < 0) {
+        warn("map_region() for stack failed: %i", res);
+        return -E_INVALID_EXE;
+    }
 
     return 0;
 }
@@ -549,6 +610,7 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
     }
 
     // LAB 8: Your code here
+    // What?
 }
 
 
@@ -598,6 +660,7 @@ env_destroy(struct Env *env) {
     /* Reset in_page_fault flags in case *current* environment
      * is getting destroyed after performing invalid memory access. */
     // LAB 8: Your code here
+    in_page_fault = false;
 }
 
 #ifdef CONFIG_KSPACE
@@ -698,6 +761,7 @@ env_run(struct Env *env) {
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs += 1;
 
+    switch_address_space(&env->address_space);
     env_pop_tf(&curenv->env_tf);
 
     panic("env_run unreachable?");

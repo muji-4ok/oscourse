@@ -12,7 +12,7 @@ SECTIONS
 
 	.text : ALIGN(0x1000) {
 		__text_start = .;
-		*(.text .stub .text.* .gnu.linkonce.t.*)
+		*(.text .ltext .stub .text.* .ltext.* .gnu.linkonce.t.*)
 		__text_end = .;
 
 		. = ALIGN(0x1000);
@@ -21,14 +21,14 @@ SECTIONS
 
 	.rodata : ALIGN(0x1000) {
 		__rodata_start = .;
-		*(.rodata .rodata.* .gnu.linkonce.r.* .data.rel.ro.local)
+		*(.rodata .lrodata .rodata.* .lrodata.* .gnu.linkonce.r.* .data.rel.ro.local .ldata.rel.ro)
 		. = ALIGN(0x1000);
 		__rodata_end = .;
 	}
 
 	.data : ALIGN(0x1000) {
 		__data_start = .;
-		*(.data .data.*)
+		*(.data .ldata .data.*)
 		__data_end = .;
 
 		__ctors_start = .;
@@ -52,7 +52,7 @@ SECTIONS
 
 	.bss : ALIGN(0x1000) {
 		__bss_start = .;
-		*(.bss)
+		*(.bss .lbss .bss.* .lbss.*)
 		*(COMMON)
 		/* Ensure page-aligned segment size */
 		. = ALIGN(0x1000);

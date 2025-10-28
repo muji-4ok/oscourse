@@ -4,8 +4,6 @@ PROGLIBS = jos
 
 .SECONDARY: $(patsubst %, %.ld, $(KERN_BINFILES)) $(patsubst %_out, %, $(KERN_BINFILES))
 
-# MY_FLAGS = -Ddebug=0 -fno-builtin -I. -MD -Ofast -flto -ffreestanding -fno-omit-frame-pointer -mno-red-zone -Wall -Wformat=2 -Wno-unused-function -Werror -g -gpubnames -gdwarf-4 -fno-stack-protector  -Wno-unused-but-set-variable -mno-sse -mno-sse2 -mno-mmx -DLAB=3 -mcmodel=large -m64 -DCONFIG_KSPACE -DJOS_PROG
-
 $(OBJDIR)/prog/%.o: prog/%.c $(OBJDIR)/.vars.USER_CFLAGS
 	@echo + cc[PROG] $<
 	@mkdir -p $(@D)
