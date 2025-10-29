@@ -161,9 +161,6 @@ _kaddr(const char *file, int line, physaddr_t pa) {
 #define X86MASK      0xFFFFFFFF
 #define X86ADDR(kva) ((kva)&X86MASK)
 
-/* Number of PML4 entries taken by userspace */
-#define NUSERPML4 1
-
 inline static physaddr_t __attribute__((always_inline))
 page2pa(struct Page *page) {
     return page->addr << CLASS_BASE;

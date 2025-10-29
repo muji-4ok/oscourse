@@ -229,7 +229,7 @@ sys_alloc_region(envid_t envid, uintptr_t addr, size_t size, int perm) {
         return -E_INVAL;
     }
 
-    if ((perm & ~(ALLOC_ZERO | ALLOC_ONE)) & ~(PROT_RWX | PROT_WC | PROT_CD)) {
+    if (perm & ~(ALLOC_ZERO | ALLOC_ONE | PROT_ALL)) {
         warn("permissions invalid");
         return -E_INVAL;
     }
@@ -616,6 +616,26 @@ static int
 sys_env_set_trapframe(envid_t envid, struct Trapframe *tf) {
     // LAB 11: Your code here
 
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    user_mem_assert(target, tf, sizeof(*tf), PROT_R);
+
+    nosan_memcpy(&target->env_tf, tf, sizeof(*tf));
+
+    target->env_tf.tf_rflags &= ~(FL_IOPL_MASK | FL_NT | FL_RF | FL_VM | FL_AC | FL_VIF | FL_VIP | FL_ID);
+    target->env_tf.tf_rflags |= (target->env_type == ENV_TYPE_FS ? FL_IOPL_3 : FL_IOPL_0);
+    target->env_tf.tf_rflags |= FL_IF;
+    target->env_tf.tf_ds = GD_UD | 3;
+    target->env_tf.tf_es = GD_UD | 3;
+    target->env_tf.tf_ss = GD_UD | 3;
+    target->env_tf.tf_cs = GD_UT | 3;
+
     return 0;
 }
 
@@ -686,6 +706,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return (uintptr_t)sys_ipc_recv(a1, a2);
     case SYS_region_refs:
         return (uintptr_t)sys_region_refs(a1, (size_t)a2, a3, (size_t)a4);
+    case SYS_env_set_trapframe:
+        return (uintptr_t)sys_env_set_trapframe((envid_t)a1, (struct Trapframe *)a2);
     default:
         warn("syscall %lu not available", syscallno);
         return -E_NO_SYS;

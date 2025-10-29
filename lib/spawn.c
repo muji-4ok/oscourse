@@ -1,6 +1,10 @@
 #include <inc/lib.h>
 #include <inc/elf.h>
 
+#ifndef spawn_debug
+#define spawn_debug 0
+#endif
+
 #define UTEMP2USTACK(addr) ((void *)(addr) + (USER_STACK_TOP - USER_STACK_SIZE) - UTEMP)
 
 /* Helper functions for spawn. */
@@ -265,7 +269,7 @@ static int
 map_segment(envid_t child, uintptr_t va, size_t memsz,
             int fd, size_t filesz, off_t fileoffset, int perm) {
 
-    // cprintf("map_segment %x+%x\n", va, memsz);
+    if_cprintf(spawn_debug, "spawn: map_segment 0x%lx+0x%lx\n", va, memsz);
 
     /* Fixup unaligned destination */
     int res = PAGE_OFFSET(va);
@@ -286,6 +290,48 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
     /* read filesz to UTEMP */
     /* Map read section conents to child */
     /* Unmap it from parent */
+
+    assert(filesz <= memsz);
+    assert(memsz <= HUGE_PAGE_SIZE);
+
+    if_cprintf(spawn_debug, "spawn: allocating temp region in parent of size 0x%lx\n", memsz);
+    res = sys_alloc_region(CURENVID, UTEMP, memsz, PROT_R | PROT_W | PROT_X | ALLOC_ZERO);
+    if (res < 0) {
+        cprintf("spawn: failed to allocate temp region in parent of size 0x%lx: %i\n", memsz, res);
+        return res;
+    }
+
+    if_cprintf(spawn_debug, "spawn: seeking to offset 0x%x in fd %d\n", fileoffset, fd);
+    res = seek(fd, fileoffset);
+    if (res < 0) {
+        cprintf("spawn: failed to seek to offset 0x%x in fd %d: %i\n", fileoffset, fd, res);
+        return res;
+    }
+
+    if_cprintf(spawn_debug, "spawn: reading 0x%lx bytes from file\n", filesz);
+    ssize_t read_res = readn(fd, UTEMP, filesz);
+    if (read_res < 0) {
+        cprintf("spawn: failed to read 0x%lx bytes from file: %i\n", filesz, (int)read_res);
+        return read_res;
+    }
+
+    if (read_res != filesz) {
+        panic("read only 0x%lx bytes out of required 0x%lx\n", (size_t)read_res, filesz);
+    }
+
+    if_cprintf(spawn_debug, "spawn: mapping temp region from parent to child at %p\n", (void *)va);
+    res = sys_map_region(CURENVID, UTEMP, child, (void *)va, memsz, perm);
+    if (res < 0) {
+        cprintf("spawn: failed to map temp region from parent to child at %p: %i\n", (void *)va, res);
+        return res;
+    }
+
+    if_cprintf(spawn_debug, "spawn: unmapping temp region from parent\n");
+    res = sys_unmap_region(0, UTEMP, memsz);
+    if (res < 0) {
+        cprintf("spawn: failed to unmap temp region from parent: %i\n", res);
+        return res;
+    }
 
     return 0;
 }

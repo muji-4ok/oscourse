@@ -62,7 +62,42 @@ foreach_shared_region(int (*fun)(void *start, void *end, void *arg), void *arg) 
     // LAB 11: Your code here:
 
     int res = 0;
-    (void)fun, (void)arg;
+
+    for (uintptr_t pml4_off = 0; pml4_off < MAX_USER_ADDRESS; pml4_off += (1ull << PML4_SHIFT)) {
+        if (!(uvpml4[VPML4(pml4_off)] & PTE_P)) {
+            continue;
+        }
+
+        for (uintptr_t pdp_off = pml4_off; pdp_off < pml4_off + (1ull << PML4_SHIFT); pdp_off += (1ull << PDP_SHIFT)) {
+            if (!(uvpdp[VPDP(pdp_off)] & PTE_P)) {
+                continue;
+            }
+
+            if ((uvpdp[VPDP(pdp_off)] & PTE_PS) && (uvpdp[VPDP(pdp_off)] & PTE_SHARE)) {
+                res = fun((void *)pdp_off, (void *)(pdp_off + (1ul << PDP_SHIFT)), arg);
+                continue;
+            }
+
+            for (uintptr_t pd_off = pdp_off; pd_off < pdp_off + (1ull << PDP_SHIFT); pd_off += (1ull << PD_SHIFT)) {
+                if (!(uvpd[VPD(pd_off)] & PTE_P)) {
+                    continue;
+                }
+
+                if ((uvpd[VPD(pd_off)] & PTE_PS) && (uvpd[VPD(pd_off)] & PTE_SHARE)) {
+                    res = fun((void *)pd_off, (void *)(pd_off + (1ul << PD_SHIFT)), arg);
+                    continue;
+                }
+
+                for (uintptr_t addr = pd_off; addr < pd_off + (1ull << PD_SHIFT); addr += (1ull << PT_SHIFT)) {
+                    if (!(uvpt[VPT(addr)] & PTE_P) || !(uvpt[VPT(addr)] & PTE_SHARE)) {
+                        continue;
+                    }
+
+                    res = fun((void *)addr, (void *)(addr + PAGE_SIZE), arg);
+                }
+            }
+        }
+    }
 
     return res;
 }

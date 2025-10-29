@@ -149,6 +149,9 @@
 #define UVSYS_SIZE PAGE_SIZE
 #define UVSYS      (UENVS - UVSYS_SIZE)
 
+/* Number of PML4 entries taken by userspace */
+#define NUSERPML4 1
+
 /*
  * Top of user VM. User can manipulate VA from MAX_USER_ADDRESS-1 and down!
  */
