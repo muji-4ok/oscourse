@@ -180,6 +180,12 @@ i386_init(void) {
     // ENV_CREATE(user_faultreadkernel, ENV_TYPE_USER);
     // ENV_CREATE(user_testbss, ENV_TYPE_USER);
     // ENV_CREATE(user_badsegment, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner1, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner2, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner1, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner2, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner1, ENV_TYPE_USER);
+    // ENV_CREATE(user_longrunner2, ENV_TYPE_USER);
 #endif /* TEST* */
 #endif
 

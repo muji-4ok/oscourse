@@ -201,7 +201,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 
     /* For now init trapframe with IF set */
     // --- Not longer true
-    // env->env_tf.tf_rflags = FL_IF;
+    env->env_tf.tf_rflags = FL_IF;
 
     /* Commit the allocation */
     env_free_list = env->env_link;
@@ -558,7 +558,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     if_cprintf(trace_elf, "setting flags to env = %x\n", elf->e_flags);
 
     env->env_tf.tf_rip = elf->e_entry;
-    env->env_tf.tf_rflags = elf->e_flags;
+    // env->env_tf.tf_rflags = elf->e_flags;
     env->binary = binary;
 
     // TODO: Userspace

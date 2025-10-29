@@ -89,7 +89,9 @@ KERN_BINFILES :=	user/hello \
 			user/faultwritekernel \
 			user/bounds \
 			user/implicitconv \
-			user/signedoverflow
+			user/signedoverflow \
+			user/longrunner1 \
+			user/longrunner2
 KERN_BINFILES := $(patsubst %, $(OBJDIR)/%, $(KERN_BINFILES))
 endif
 
