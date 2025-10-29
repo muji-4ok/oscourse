@@ -34,6 +34,21 @@ bc_pgfault(struct UTrapframe *utf) {
      * the disk. */
     // LAB 10: Your code here
 
+    addr = ROUNDDOWN(addr, BLKSIZE);
+
+    int res = sys_alloc_region(CURENVID, addr, BLKSIZE, PROT_RW);
+    if (res < 0) {
+        panic("bg_pgfault() failed: sys_alloc_region() returned %i", res);
+    }
+
+    // Force allocation. Otherwise nvme_read won't work correctly
+    *(volatile char *)addr = 0;
+
+    res = nvme_read(blockno * BLKSECTS, addr, BLKSECTS);
+    if (res < 0) {
+        panic("bg_pgfault() failed: nvme_read() returned %i", res);
+    }
+
     return 1;
 }
 
@@ -55,8 +70,22 @@ flush_block(void *addr) {
         panic("reading non-existent block %08x out of %08x\n", blockno, super->s_nblocks);
 
     // LAB 10: Your code here.
-    (void)res;
 
+    addr = ROUNDDOWN(addr, BLKSIZE);
+
+    if (is_page_dirty(addr)) {
+        assert(is_page_present(addr));
+
+        res = nvme_write(blockno * BLKSECTS, addr, BLKSECTS);
+        if (res < 0) {
+            panic("flush_block() failed: nvme_write() returned: %i", res);
+        }
+
+        res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, get_prot(addr) & PTE_SYSCALL);
+        if (res < 0) {
+            panic("flush_block() failed: sys_map_region() returned: %i", res);
+        }
+    }
 
     assert(!is_page_dirty(addr));
 }

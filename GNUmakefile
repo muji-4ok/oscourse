@@ -106,7 +106,7 @@ OBJCOPY	:= $(GCCPREFIX)objcopy
 OBJDUMP	:= $(GCCPREFIX)objdump
 NM	:= $(GCCPREFIX)nm
 
-EXTRA_CFLAGS	:= $(EXTRA_CFLAGS) -Wno-unused-but-set-variable
+EXTRA_CFLAGS	:= $(EXTRA_CFLAGS) -Wno-unused-but-set-variable -Wno-address-of-packed-member
 
 GCC_LIB := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 

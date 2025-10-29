@@ -78,6 +78,8 @@ enum {
     FSREQ_SYNC
 };
 
+#define MAX_WRITE_REQ_SIZE (PAGE_SIZE - (2 * sizeof(size_t)))
+
 union Fsipc {
     struct Fsreq_open {
         char req_path[MAXPATHLEN];
@@ -97,7 +99,7 @@ union Fsipc {
     struct Fsreq_write {
         int req_fileid;
         size_t req_n;
-        char req_buf[PAGE_SIZE - (2 * sizeof(size_t))];
+        char req_buf[MAX_WRITE_REQ_SIZE];
     } write;
     struct Fsreq_stat {
         int req_fileid;

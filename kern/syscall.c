@@ -229,7 +229,7 @@ sys_alloc_region(envid_t envid, uintptr_t addr, size_t size, int perm) {
         return -E_INVAL;
     }
 
-    if ((perm & ~(ALLOC_ZERO | ALLOC_ONE)) & ~PROT_RWX) {
+    if ((perm & ~(ALLOC_ZERO | ALLOC_ONE)) & ~(PROT_RWX | PROT_WC | PROT_CD)) {
         warn("permissions invalid");
         return -E_INVAL;
     }
@@ -301,7 +301,7 @@ sys_map_region(envid_t srcenvid, uintptr_t srcva,
         return -E_INVAL;
     }
 
-    if (perm & ~(PROT_RWX | PROT_WC | PROT_CD | PROT_SHARE | PROT_LAZY | PROT_COMBINE)) {
+    if (perm & ~PROT_ALL) {
         warn("permissions invalid");
         return -E_INVAL;
     }
@@ -376,7 +376,45 @@ sys_map_physical_region(uintptr_t pa, envid_t envid, uintptr_t va, size_t size, 
     // LAB 10: Your code here
     // TIP: Use map_physical_region() with (perm | PROT_USER_ | MAP_USER_MMIO)
     //      And don't forget to validate arguments as always.
-    return 0;
+
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    // Needed?
+    if (target->env_type != ENV_TYPE_FS) {
+        return -E_INVAL;
+    }
+
+    // First check this, then we are good to check bounds
+    if ((va & CLASS_MASK(0)) || (size & CLASS_MASK(0))) {
+        warn("va or size unaligned");
+        return -E_INVAL;
+    }
+
+    // Unsigned overflow
+    if (va + size <= va) {
+        warn("overflow for va + size detected");
+        return -E_INVAL;
+    }
+
+    if (va + size > MAX_USER_ADDRESS) {
+        warn("memory range exceeds user-addressable memory");
+        return -E_INVAL;
+    }
+
+    if (perm & ~(PROT_RWX | PROT_WC | PROT_CD)) {
+        warn("permissions invalid");
+        return -E_INVAL;
+    }
+
+    perm |= PROT_USER_ | MAP_USER_MMIO;
+
+    return map_physical_region(&target->address_space, va, pa, size, perm);
 }
 
 /* Try to send 'value' to the target env 'envid'.
@@ -565,10 +603,18 @@ sys_ipc_recv(uintptr_t dstva, uintptr_t maxsize) {
 }
 
 static int
-sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, uintptr_t size2) {
+sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, size_t size2) {
     // LAB 10: Your code here
 
-    return 0;
+    int ref1 = region_maxref(&curenv->address_space, addr, size);
+
+    if (addr2 < MAX_USER_ADDRESS) {
+        return ref1;
+    }
+
+    int ref2 = region_maxref(&curenv->address_space, addr2, size2);
+
+    return ref1 - ref2;
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -596,6 +642,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return (uintptr_t)sys_map_region((envid_t)a1, a2, (envid_t)a3, a4, (size_t)a5, (int)a6);
     case SYS_unmap_region:
         return (uintptr_t)sys_unmap_region((envid_t)a1, a2, (size_t)a3);
+    case SYS_map_physical_region:
+        return (uintptr_t)sys_map_physical_region(a1, (envid_t)a2, a3, (size_t)a4, (int)a5);
     case SYS_exofork:
         return (uintptr_t)sys_exofork();
     case SYS_yield: {
@@ -610,6 +658,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return (uintptr_t)sys_ipc_try_send((envid_t)a1, (uint32_t)a2, a3, (size_t)a4, (int)a5);
     case SYS_ipc_recv:
         return (uintptr_t)sys_ipc_recv(a1, a2);
+    case SYS_region_refs:
+        return (uintptr_t)sys_region_refs(a1, (size_t)a2, a3, (size_t)a4);
     default:
         warn("syscall %lu not available", syscallno);
         return -E_NO_SYS;

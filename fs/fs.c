@@ -60,6 +60,17 @@ alloc_block(void) {
      * super->s_nblocks blocks in the disk altogether. */
 
     // LAB 10: Your code here
+    // 0 is unused, 1 is reserved for super
+    for (blockno_t blockno = 3; blockno < super->s_nblocks; ++blockno) {
+        if (!block_is_free(blockno)) {
+            continue;
+        }
+
+        CLRBIT(bitmap, blockno);
+        // Each blockno --> one bit in bitmap
+        flush_block(&bitmap[blockno / 32]);
+        return blockno;
+    }
 
     return 0;
 }
@@ -124,9 +135,41 @@ int
 file_block_walk(struct File *f, blockno_t filebno, blockno_t **ppdiskbno, bool alloc) {
     // LAB 10: Your code here
 
-    *ppdiskbno = NULL;
+    assert(ppdiskbno);
 
-    return 0;
+    // File too big
+    if (filebno >= NDIRECT + NINDIRECT) {
+        return -E_INVAL;
+    }
+
+    // Pointer inline
+    if (filebno < NDIRECT) {
+        blockno_t *direct_ptr = (blockno_t *)&f->f_direct;
+        *ppdiskbno = &direct_ptr[filebno];
+        return 0;
+    }
+
+    // Allocate an indirect storage block if it is not present
+    if (f->f_indirect == 0 && alloc) {
+        assert(!block_is_free(f->f_indirect));
+        blockno_t f_indirect = alloc_block();
+
+        if (!f_indirect) {
+            return -E_NO_DISK;
+        }
+
+        f->f_indirect = f_indirect;
+    }
+
+    // Traverse blocknos stored in the indirect block
+    if (f->f_indirect) {
+        assert(!block_is_free(f->f_indirect));
+        blockno_t *blocknos = (blockno_t *)diskaddr(f->f_indirect);
+        *ppdiskbno = &blocknos[filebno - NDIRECT];
+        return 0;
+    }
+
+    return -E_NOT_FOUND;
 }
 
 /* Set *blk to the address in memory where the filebno'th
@@ -141,7 +184,27 @@ int
 file_get_block(struct File *f, blockno_t filebno, char **blk) {
     // LAB 10: Your code here
 
-    *blk = NULL;
+    // Pointer to memory that contains the blockno value
+    // Could be one of direct blocknos inside of struct File, or indirect stored
+    // one some aux block
+    blockno_t *ptr = NULL;
+    int res = file_block_walk(f, filebno, &ptr, true);
+    if (res < 0) {
+        *blk = NULL;
+        return res;
+    }
+
+    if (!*ptr) {
+        blockno_t blockno = alloc_block();
+        if (!blockno) {
+            *blk = NULL;
+            return -E_NO_DISK;
+        }
+
+        *ptr = blockno;
+    }
+
+    *blk = diskaddr(*ptr);
 
     return 0;
 }

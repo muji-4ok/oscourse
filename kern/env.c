@@ -638,6 +638,7 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // What?
 
     // LAB 10: Your code here
+    // Already done in env_alloc
 }
 
 
