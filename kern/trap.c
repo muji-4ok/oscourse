@@ -441,6 +441,9 @@ page_fault_handler(struct Trapframe *tf) {
     static_assert(UTRAP_RIP == offsetof(struct UTrapframe, utf_rip), "UTRAP_RIP should be equal to RIP offset");
     static_assert(UTRAP_RSP == offsetof(struct UTrapframe, utf_rsp), "UTRAP_RSP should be equal to RSP offset");
 
+    // Also ensure that pgfault upcall is usable
+    user_mem_assert(curenv, curenv->env_pgfault_upcall, sizeof(void *), PROT_R | PROT_X);
+
     /* Force allocation of exception stack page to prevent memcpy from
      * causing pagefault during another pagefault */
     // LAB 9: Your code here:
@@ -454,9 +457,6 @@ page_fault_handler(struct Trapframe *tf) {
     /* Assert existance of exception stack */
     // LAB 9: Your code here:
     user_mem_assert(curenv, (void *)(USER_EXCEPTION_STACK_TOP - PAGE_SIZE), PAGE_SIZE, PROT_R | PROT_W);
-
-    // Also ensure that pgfault upcall is usable
-    // user_mem_assert(curenv, curenv->env_pgfault_upcall, sizeof(void *), PROT_R | PROT_X);
 
     /* Build local copy of UTrapframe */
     // LAB 9: Your code here:
