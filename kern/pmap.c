@@ -1773,7 +1773,7 @@ detect_memory(void) {
                 type = RESERVED_NODE;
             }
 
-            if (trace_init) {
+            if (trace_phys_map) {
                 cprintf(
                         "UEFI phys mem region: start = %p, size = 0x%lx, type = %u\n",
                         (void *)start->PhysicalStart, region_size, start->Type);

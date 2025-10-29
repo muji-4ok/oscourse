@@ -22,7 +22,7 @@
 #endif
 
 #ifndef trace_phys_map
-#define trace_phys_map 1
+#define trace_phys_map 0
 #endif
 
 #ifndef trace_memory_more
