@@ -198,6 +198,10 @@ serve_read(envid_t envid, union Fsipc *ipc) {
                 envid, req->req_fileid, (uint32_t)req->req_n);
     }
 
+    if (req->req_n > PAGE_SIZE) {
+        return -E_INVAL;
+    }
+
     // LAB 10: Your code here
     struct OpenFile *o;
 

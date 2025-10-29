@@ -113,8 +113,10 @@ devfile_read(struct Fd *fd, void *buf, size_t n) {
      * system server. */
 
     // LAB 10: Your code here:
+    size_t capped_n = MIN(n, PAGE_SIZE);
+
     fsipcbuf.read.req_fileid = fd->fd_file.id;
-    fsipcbuf.read.req_n = n;
+    fsipcbuf.read.req_n = capped_n;
 
     int res = fsipc(FSREQ_READ, NULL);
     if (res < 0) {
