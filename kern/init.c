@@ -157,7 +157,7 @@ i386_init(void) {
     /* Choose the timer used for scheduling: hpet or pit */
     timers_schedule("rtc");
 
-#ifdef CONFIG_KSPACE
+#if 0
     /* Touch all you want */
     // ENV_CREATE_KERNEL_TYPE(prog_test1);
     // ENV_CREATE_KERNEL_TYPE(prog_test2);

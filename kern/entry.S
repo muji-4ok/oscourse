@@ -25,7 +25,7 @@ entry:
     # Should never reach this place
     jmp .
 
-#ifdef CONFIG_KSPACE
+#if 0
 
 .global save_trapframe_trap
 save_trapframe_trap:
@@ -114,7 +114,7 @@ pfstacktop:
 uefi_lp:
 .quad 0
 
-#ifdef CONFIG_KSPACE
+#if 0
 save_trapframe_ret:
 .quad 0
 

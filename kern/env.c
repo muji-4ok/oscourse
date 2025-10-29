@@ -21,7 +21,7 @@
 /* Currently active environment */
 struct Env *curenv = NULL;
 
-#ifdef CONFIG_KSPACE
+#if 0 
 /* All environments */
 struct Env env_array[NENV];
 struct Env *envs = env_array;
@@ -164,7 +164,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 
     /* Set the basic status variables */
     env->env_parent_id = parent_id;
-#ifdef CONFIG_KSPACE
+#if 0
     env->env_type = ENV_TYPE_KERNEL;
 #else
     env->env_type = type;
@@ -187,7 +187,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
      * checks involving the RPL and the Descriptor Privilege Level
      * (DPL) stored in the descriptors themselves */
 
-#ifdef CONFIG_KSPACE
+#if 0
     env->env_tf.tf_ds = GD_KD;
     env->env_tf.tf_es = GD_KD;
     env->env_tf.tf_ss = GD_KD;
@@ -648,7 +648,7 @@ env_free(struct Env *env) {
     /* Note the environment's demise. */
     if (trace_envs) cprintf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, env->env_id);
 
-#ifndef CONFIG_KSPACE
+#if 1
     /* If freeing the current environment, switch to kern_pgdir
      * before freeing the page directory, just in case the page
      * gets reused. */
@@ -691,7 +691,7 @@ env_destroy(struct Env *env) {
     in_page_fault = false;
 }
 
-#ifdef CONFIG_KSPACE
+#if 0
 void
 csys_exit(void) {
     if (!curenv) panic("curenv = NULL");
