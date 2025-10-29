@@ -20,9 +20,35 @@ envid_t
 fork(void) {
     // LAB 9: Your code here.
 
-    panic("fork() is not implemented");
+    envid_t child_id = sys_exofork();
+    if (child_id < 0) {
+        // This is error
+        return child_id;
+    }
 
-    return 0;
+    if (child_id == 0) {
+        thisenv = &envs[ENVX(sys_getenvid())];
+        return 0;
+    }
+
+    // all here sets: R, W, X, WC, CD, but due to combine they are set only if they were set in parent
+    // also all sets SHARE
+    int res = sys_map_region(0, NULL, child_id, NULL, MAX_USER_ADDRESS, PROT_ALL | PROT_LAZY | PROT_COMBINE);
+    if (res < 0) {
+        return res;
+    }
+
+    res = sys_env_set_pgfault_upcall(child_id, thisenv->env_pgfault_upcall);
+    if (res < 0) {
+        return res;
+    }
+
+    res = sys_env_set_status(child_id, ENV_RUNNABLE);
+    if (res < 0) {
+        return res;
+    }
+
+    return child_id;
 }
 
 envid_t

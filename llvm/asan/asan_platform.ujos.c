@@ -68,8 +68,21 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
-    (void)utf;
-    return 1;
+    if ((uint8_t *)utf->utf_fault_va >= asan_internal_shadow_start && (uint8_t *)utf->utf_fault_va <= asan_internal_shadow_end) {
+        if ((uint8_t *)utf->utf_fault_va >= SHADOW_FOR_ADDRESS((uintptr_t)(asan_internal_shadow_start)) &&
+            (uint8_t *)utf->utf_fault_va <= SHADOW_FOR_ADDRESS((uintptr_t)(asan_internal_shadow_end))) {
+            _panic("asan", __LINE__, "shadow memory referencing itself\n");
+        }
+
+        int res = sys_alloc_region(0, (void *)ROUNDDOWN(utf->utf_fault_va, SHADOW_STEP), SHADOW_STEP, ALLOC_ONE | PROT_RW);
+        if (res < 0) {
+            _panic("asan", __LINE__, "allocation of shadow memory failed: %i\n", res);
+        }
+
+        return 1;
+    }
+
+    return 0;
 }
 #endif
 
@@ -130,7 +143,7 @@ platform_asan_init(void) {
 
     /* 3. Kernel exposed info (UENVS, UVSYS (only for lab 12)) */
     // LAB 8: Your code here
-    platform_asan_unpoison((void *) UENVS, UENVS_SIZE);
+    platform_asan_unpoison((void *)UENVS, UENVS_SIZE);
 
     // TODO NOTE: LAB 12 code may be here
 #if LAB >= 12

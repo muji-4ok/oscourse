@@ -1658,7 +1658,9 @@ switch_address_space(struct AddressSpace *space) {
         return space;
     }
 
-    cprintf("Switching address space from %p to %p\n", current_space, space);
+    if (trace_aspace_switch) {
+        cprintf("Switching address space from %p to %p\n", current_space, space);
+    }
 
     struct AddressSpace *old = current_space;
     current_space = space;

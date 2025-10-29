@@ -186,7 +186,17 @@ i386_init(void) {
     // ENV_CREATE(user_longrunner2, ENV_TYPE_USER);
     // ENV_CREATE(user_longrunner1, ENV_TYPE_USER);
     // ENV_CREATE(user_longrunner2, ENV_TYPE_USER);
-    ENV_CREATE(user_forktree, ENV_TYPE_USER);
+    // ENV_CREATE(user_forktree, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultread, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultwrite, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultdie, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultalloc, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultallocbad, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultnostack, ENV_TYPE_USER);
+    ENV_CREATE(user_faultbadhandler, ENV_TYPE_USER);
+    // ENV_CREATE(user_faultevilhandler, ENV_TYPE_USER);
+    // ENV_CREATE(user_primes, ENV_TYPE_USER);
+    // ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
 #endif /* TEST* */
 #endif
 

@@ -61,7 +61,14 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
      * (i.e., does not refer to a _previous_ environment
      * that used the same slot in the envs[] array). */
     env = &envs[ENVX(envid)];
-    if (env->env_status == ENV_FREE || env->env_id != envid) {
+    if (env->env_status == ENV_FREE) {
+        warn("target is uninitialized. id = %d", env->env_id);
+        *env_store = NULL;
+        return -E_BAD_ENV;
+    }
+
+    if (env->env_id != envid) {
+        warn("target is stale. our id = %d, actual id = %d", envid, env->env_id);
         *env_store = NULL;
         return -E_BAD_ENV;
     }
@@ -72,6 +79,8 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
      * must be either the current environment
      * or an immediate child of the current environment. */
     if (need_check_perm && env != curenv && env->env_parent_id != curenv->env_id) {
+        warn("caller does not have permissions to alter status of target. caller = %d, target = %d, target->parent = %d",
+             curenv->env_id, env->env_id, env->env_parent_id);
         *env_store = NULL;
         return -E_BAD_ENV;
     }
@@ -752,14 +761,8 @@ env_run(struct Env *env) {
     // LAB 3: Your code here
     // LAB 8: Your code here
 
-    if (curenv != NULL) {
-        if (curenv->env_status == ENV_RUNNING) {
-            curenv->env_status = ENV_RUNNABLE;
-        } else if (curenv->env_status == ENV_FREE) {
-            // pass
-        } else {
-            panic("unreachable - unexpected curenv status in env_run");
-        }
+    if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+        curenv->env_status = ENV_RUNNABLE;
     }
 
     curenv = env;

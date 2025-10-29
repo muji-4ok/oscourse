@@ -25,6 +25,10 @@
 #define trace_phys_map 0
 #endif
 
+#ifndef trace_aspace_switch
+#define trace_aspace_switch 0
+#endif
+
 #ifndef trace_memory_more
 #define trace_memory_more 0
 #endif

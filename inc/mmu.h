@@ -91,7 +91,7 @@
 #define PTE_NX  (1ULL << 63) /* Not executable */
 
 #define PTE_MBZ   0x180 /* Bits must be zero */
-#define PTE_SHARE 0x400
+#define PTE_SHARE 0x400 /* Bit ignored by processor, usable by kernel */
 
 /* The PTE_AVAIL bits aren't used by the kernel or interpreted by the
  * hardware, so user processes are allowed to set them arbitrarily */

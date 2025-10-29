@@ -273,6 +273,7 @@ trap_dispatch(struct Trapframe *tf) {
     case T_PGFLT:
         /* Handle processor exceptions. */
         // LAB 9: Your code here.
+        page_fault_handler(tf);
         return;
     case T_BRKPT:
         // LAB 8: Your code here.
@@ -443,26 +444,52 @@ page_fault_handler(struct Trapframe *tf) {
     /* Force allocation of exception stack page to prevent memcpy from
      * causing pagefault during another pagefault */
     // LAB 9: Your code here:
+    force_alloc_page(current_space, USER_EXCEPTION_STACK_TOP - PAGE_SIZE, MAX_ALLOCATION_CLASS);
 
     /* Force allocate exception stack page to prevent memcpy from
      * causing pagefault during another pagefault */
     // LAB 9: Your code here:
+    // duplicate
 
     /* Assert existance of exception stack */
     // LAB 9: Your code here:
+    user_mem_assert(curenv, (void *)(USER_EXCEPTION_STACK_TOP - PAGE_SIZE), PAGE_SIZE, PROT_R | PROT_W);
+
+    // Also ensure that pgfault upcall is usable
+    // user_mem_assert(curenv, curenv->env_pgfault_upcall, sizeof(void *), PROT_R | PROT_X);
 
     /* Build local copy of UTrapframe */
     // LAB 9: Your code here:
+    struct UTrapframe utf = {
+            .utf_fault_va = (uint64_t)cr2,
+            .utf_err = tf->tf_err,
+            .utf_regs = tf->tf_regs,
+            .utf_rip = tf->tf_rip,
+            .utf_rflags = tf->tf_rflags,
+            .utf_rsp = tf->tf_rsp};
 
     /* And then copy it userspace (nosan_memcpy()) */
     // LAB 9: Your code here:
+    uintptr_t frame_start = 0;
+
+    if (tf->tf_rsp >= USER_EXCEPTION_STACK_TOP - PAGE_SIZE && tf->tf_rsp <= USER_EXCEPTION_STACK_TOP - 1) {
+        frame_start = tf->tf_rsp - sizeof(uint64_t) - sizeof(struct UTrapframe);
+        user_mem_assert(curenv, (void *)frame_start, USER_EXCEPTION_STACK_TOP - frame_start, PROT_W | PROT_R);
+    } else {
+        frame_start = USER_EXCEPTION_STACK_TOP - sizeof(struct UTrapframe);
+    }
+
+    nosan_memcpy((void *)frame_start, &utf, sizeof(struct UTrapframe));
 
     /* Reset in_page_fault flag */
     // LAB 9: Your code here:
+    in_page_fault = 0;
 
     /* Rerun current environment */
     // LAB 9: Your code here:
+    tf->tf_rsp = frame_start;
+    tf->tf_rip = (uintptr_t)curenv->env_pgfault_upcall;
+    env_run(curenv);
 
-    while (1)
-        ;
+    panic("page_fault_handler unreachable");
 }

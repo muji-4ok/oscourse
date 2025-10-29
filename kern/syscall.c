@@ -86,6 +86,7 @@ sys_env_destroy(envid_t envid) {
 static void
 sys_yield(void) {
     // LAB 9: Your code here
+    sched_yield();
 }
 
 /* Allocate a new environment.
@@ -101,7 +102,19 @@ sys_exofork(void) {
      * will appear to return 0. */
 
     // LAB 9: Your code here
-    return 0;
+    struct Env *new_env = NULL;
+
+    int res = env_alloc(&new_env, curenv->env_id, ENV_TYPE_USER);
+    if (res < 0) {
+        warn("env_alloc() failed: %i", res);
+        return res;
+    }
+
+    new_env->env_status = ENV_NOT_RUNNABLE;
+    memcpy(&new_env->env_tf, &curenv->env_tf, sizeof(struct Trapframe));
+    new_env->env_tf.tf_regs.reg_rax = 0;
+
+    return new_env->env_id;
 }
 
 /* Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -121,6 +134,21 @@ sys_env_set_status(envid_t envid, int status) {
 
     // LAB 9: Your code here
 
+    if (status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE) {
+        warn("not allowed to set status not equal to ENV_RUNNABLE or ENV_NOT_RUNNABLE");
+        return -E_INVAL;
+    }
+
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    target->env_status = status;
+
     return 0;
 }
 
@@ -135,6 +163,16 @@ sys_env_set_status(envid_t envid, int status) {
 static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func) {
     // LAB 9: Your code here:
+
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    target->env_pgfault_upcall = func;
 
     return 0;
 }
@@ -166,7 +204,45 @@ static int
 sys_alloc_region(envid_t envid, uintptr_t addr, size_t size, int perm) {
     // LAB 9: Your code here:
 
-    return 0;
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    // First check this, then we are good to check bounds
+    if ((addr & CLASS_MASK(0)) || (size & CLASS_MASK(0))) {
+        warn("addr or size unaligned");
+        return -E_INVAL;
+    }
+
+    // Unsigned overflow
+    if (addr + size <= addr) {
+        warn("overflow for addr + size detected");
+        return -E_INVAL;
+    }
+
+    if (addr + size > MAX_USER_ADDRESS) {
+        warn("memory range exceeds user-addressable memory");
+        return -E_INVAL;
+    }
+
+    if ((perm & ~(ALLOC_ZERO | ALLOC_ONE)) & ~PROT_RWX) {
+        warn("permissions invalid");
+        return -E_INVAL;
+    }
+
+    if (!(perm & ALLOC_ZERO) && !(perm & ALLOC_ONE)) {
+        perm |= ALLOC_ZERO;
+    }
+
+    perm |= PROT_USER_ | PROT_LAZY;
+
+    res = map_region(&target->address_space, addr, NULL, 0, size, perm);
+
+    return res;
 }
 
 /* Map the region of memory at 'srcva' in srcenvid's address space
@@ -194,7 +270,47 @@ sys_map_region(envid_t srcenvid, uintptr_t srcva,
                envid_t dstenvid, uintptr_t dstva, size_t size, int perm) {
     // LAB 9: Your code here
 
-    return 0;
+    struct Env *src_env = NULL;
+    int res = envid2env(srcenvid, &src_env, true);
+    if (res < 0) {
+        warn("envid2env() for src failed: %i", res);
+        return res;
+    }
+
+    struct Env *dst_env = NULL;
+    res = envid2env(dstenvid, &dst_env, true);
+    if (res < 0) {
+        warn("envid2env() for dst failed: %i", res);
+        return res;
+    }
+
+    // First check this, then we are good to check bounds
+    if ((srcva & CLASS_MASK(0)) || (dstva & CLASS_MASK(0)) || (size & CLASS_MASK(0))) {
+        warn("srcva, dstva or size unaligned");
+        return -E_INVAL;
+    }
+
+    // Unsigned overflow
+    if (srcva + size <= srcva || dstva + size <= dstva) {
+        warn("overflow for dst/src va + size detected");
+        return -E_INVAL;
+    }
+
+    if (srcva + size > MAX_USER_ADDRESS || dstva + size > MAX_USER_ADDRESS) {
+        warn("dst or src memory range exceeds user-addressable memory");
+        return -E_INVAL;
+    }
+
+    if (perm & ~(PROT_RWX | PROT_WC | PROT_CD | PROT_SHARE | PROT_LAZY | PROT_COMBINE)) {
+        warn("permissions invalid");
+        return -E_INVAL;
+    }
+
+    perm |= PROT_USER_;
+
+    res = map_region(&dst_env->address_space, dstva, &src_env->address_space, srcva, size, perm);
+
+    return res;
 }
 
 /* Unmap the region of memory at 'va' in the address space of 'envid'.
@@ -209,6 +325,33 @@ sys_unmap_region(envid_t envid, uintptr_t va, size_t size) {
     /* Hint: This function is a wrapper around unmap_region(). */
 
     // LAB 9: Your code here
+
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, true);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    // First check this, then we are good to check bounds
+    if ((va & CLASS_MASK(0)) || (size & CLASS_MASK(0))) {
+        warn("va or size unaligned");
+        return -E_INVAL;
+    }
+
+    // Unsigned overflow
+    if (va + size <= va) {
+        warn("overflow for va + size detected");
+        return -E_INVAL;
+    }
+
+    if (va + size > MAX_USER_ADDRESS) {
+        warn("memory range exceeds user-addressable memory");
+        return -E_INVAL;
+    }
+
+    unmap_region(&target->address_space, va, size);
 
     return 0;
 }
@@ -280,6 +423,77 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, size_t size, int perm) {
     // LAB 9: Your code here
 
+    struct Env *target = NULL;
+
+    int res = envid2env(envid, &target, false);
+    if (res < 0) {
+        warn("envid2env() failed: %i", res);
+        return res;
+    }
+
+    if (!target->env_ipc_recving) {
+        return -E_IPC_NOT_RECV;
+    }
+
+    bool sends_page = srcva < MAX_USER_ADDRESS;
+    bool receives_page = target->env_ipc_dstva < MAX_USER_ADDRESS;
+
+    if (sends_page) {
+        if (srcva & CLASS_MASK(0)) {
+            warn("srcva not aligned");
+            return -E_INVAL;
+        }
+
+        if (size & CLASS_MASK(0)) {
+            warn("size not aligned");
+            return -E_INVAL;
+        }
+
+        // Unsigned overflow
+        if (srcva + size <= srcva) {
+            warn("overflow for srcva + size detected");
+            return -E_INVAL;
+        }
+
+        if (srcva + size > MAX_USER_ADDRESS) {
+            warn("memory range exceeds user-addressable memory");
+            return -E_INVAL;
+        }
+
+        if (perm & ~(PROT_RWX | PROT_SHARE | PROT_COMBINE)) {
+            warn("permissions invalid");
+            return -E_INVAL;
+        }
+
+        perm |= PROT_SHARE;
+    }
+    // Now page sending validated
+    // Page receieving is already validated before
+
+    if (sends_page && receives_page) {
+        size_t min_size = MIN(target->env_ipc_maxsz, size);
+
+        res = map_region(&target->address_space, target->env_ipc_dstva,
+                         &curenv->address_space, srcva,
+                         min_size, perm | PROT_USER_);
+        if (res < 0) {
+            warn("map_region() failed: %i", res);
+            return res;
+        }
+
+        target->env_ipc_maxsz = min_size;
+        target->env_ipc_perm = perm;
+    } else {
+        target->env_ipc_maxsz = 0;
+        target->env_ipc_perm = 0;
+    }
+
+    target->env_ipc_recving = false;
+    target->env_ipc_value = value;
+    target->env_ipc_from = curenv->env_id;
+
+    target->env_status = ENV_RUNNABLE;
+
     return 0;
 }
 
@@ -299,6 +513,53 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, size_t size, in
 static int
 sys_ipc_recv(uintptr_t dstva, uintptr_t maxsize) {
     // LAB 9: Your code here
+
+    bool receives_page = dstva < MAX_USER_ADDRESS;
+
+    if (receives_page) {
+        if (dstva & CLASS_MASK(0)) {
+            warn("dstva not aligned");
+            return -E_INVAL;
+        }
+
+        if (maxsize & CLASS_MASK(0)) {
+            warn("maxsize not aligned");
+            return -E_INVAL;
+        }
+
+        // Unsigned overflow
+        if (dstva + maxsize <= dstva) {
+            warn("overflow for dstva + maxsize detected");
+            return -E_INVAL;
+        }
+
+        if (dstva + maxsize > MAX_USER_ADDRESS) {
+            warn("memory range exceeds user-addressable memory");
+            return -E_INVAL;
+        }
+    }
+    // Now page receiving validated
+
+    // Should not be possible to call multiple recvs at the same time
+    assert(!curenv->env_ipc_recving);
+
+    // All validated
+    curenv->env_ipc_recving = true;
+
+    if (receives_page) {
+        curenv->env_ipc_dstva = dstva;
+        curenv->env_ipc_maxsz = maxsize;
+    } else {
+        curenv->env_ipc_dstva = MAX_USER_ADDRESS;
+        curenv->env_ipc_maxsz = 0;
+    }
+
+    // Zero out other fields for safety
+    curenv->env_ipc_value = 0;
+    curenv->env_ipc_from = 0;
+    curenv->env_ipc_perm = 0;
+
+    curenv->env_status = ENV_NOT_RUNNABLE;
 
     return 0;
 }
@@ -328,7 +589,28 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return (uintptr_t)sys_getenvid();
     case SYS_env_destroy:
         return (uintptr_t)sys_env_destroy((envid_t)a1);
+    case SYS_alloc_region:
+        return (uintptr_t)sys_alloc_region((envid_t)a1, a2, (size_t)a3, (int)a4);
+    case SYS_map_region:
+        return (uintptr_t)sys_map_region((envid_t)a1, a2, (envid_t)a3, a4, (size_t)a5, (int)a6);
+    case SYS_unmap_region:
+        return (uintptr_t)sys_unmap_region((envid_t)a1, a2, (size_t)a3);
+    case SYS_exofork:
+        return (uintptr_t)sys_exofork();
+    case SYS_yield: {
+        sys_yield();
+        return 0;
+    }
+    case SYS_env_set_status:
+        return (uintptr_t)sys_env_set_status((envid_t)a1, (int)a2);
+    case SYS_env_set_pgfault_upcall:
+        return (uintptr_t)sys_env_set_pgfault_upcall((envid_t)a1, (void *)a2);
+    case SYS_ipc_try_send:
+        return (uintptr_t)sys_ipc_try_send((envid_t)a1, (uint32_t)a2, a3, (size_t)a4, (int)a5);
+    case SYS_ipc_recv:
+        return (uintptr_t)sys_ipc_recv(a1, a2);
     default:
+        warn("syscall %lu not available", syscallno);
         return -E_NO_SYS;
     }
 

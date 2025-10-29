@@ -65,18 +65,28 @@ _pgfault_upcall:
     # ways as registers become unavailable as scratch space.
 
     # LAB 9: Your code here
+    movq UTRAP_RIP(%rsp), %rax # load rip to return to
+    movq UTRAP_RSP(%rsp), %rbx # load rsp to return to
+    subq $8, %rbx # allocate space on the rsp to return to to insert a rip (for ret to use) + rbp (as per calling convention)
+    movq %rax, (%rbx) # write the rip for ret
+    movq %rbx, UTRAP_RSP(%rsp) # write rbp (rsp) for ret
 
     # Restore the trap-time registers.  After you do this, you
     # can no longer modify any general-purpose registers (use POPA macro).
     # LAB 9: Your code here
+    addq $16, %rsp # skip utf_fault_va and utf_err
+    POPA # stack now points to utf_regs, use them
 
     # Restore rflags from the stack.  After you do this, you can
     # no longer use arithmetic operations or anything else that
     # modifies rflags.
     # LAB 9: Your code here
+    addq $8, %rsp # skip  utf_rip
+    popfq # stack now points to utf_rflags, use them
 
     # Switch back to the adjusted trap-time stack.
     # LAB 9: Your code here
+    popq %rsp # stack now points to utf_rsp, use it
 
     # Return to re-execute the instruction that faulted.
     ret
