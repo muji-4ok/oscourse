@@ -19,6 +19,7 @@
 #include <kern/traceopt.h>
 #include <kern/trap.h>
 #include <kern/vsyscall.h>
+#include <kern/kclock.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -95,6 +96,11 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
     return 0;
 }
 
+static void
+step_vsys(void) {
+    vsys[VSYS_gettime] = gettime();
+}
+
 /* Mark all environments in 'envs' as free, set their env_ids to 0,
  * and insert them into the env_free_list.
  * Make sure the environments are in the free list in the same order
@@ -107,6 +113,21 @@ env_init(void) {
      * Don't forget about rounding.
      * kzalloc_region only works with current_space != NULL */
     // LAB 12: Your code here
+    size_t uvsys_size_bytes = ROUNDUP(sizeof(int) * NVSYSCALLS, PAGE_SIZE);
+    assert(uvsys_size_bytes <= UVSYS_SIZE);
+
+    volatile int *uvsys_mem = kzalloc_region(uvsys_size_bytes);
+    assert(uvsys_mem != NULL);
+
+    int res = map_region(&kspace, UVSYS, &kspace, (uintptr_t)uvsys_mem, uvsys_size_bytes, PROT_R | PROT_USER_);
+    if (res < 0) {
+        panic("env_init() failed: map_region() for UVSYS returned: %i", res);
+    }
+
+    vsys = uvsys_mem;
+
+    // After we're inited vsys, do a step so the first running program will have correct inputs
+    step_vsys();
 
     /* Allocate envs array with kzalloc_region().
      * Don't forget about rounding.
@@ -121,10 +142,9 @@ env_init(void) {
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
-    int res = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs_mem, envs_size_bytes, PROT_R | PROT_USER_);
-
+    res = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs_mem, envs_size_bytes, PROT_R | PROT_USER_);
     if (res < 0) {
-        panic("env_init() failed: map_region() returned: %i", res);
+        panic("env_init() failed: map_region() for UENVS returned: %i", res);
     }
 
     envs = envs_mem;

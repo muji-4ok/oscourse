@@ -644,7 +644,7 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf) {
 static int
 sys_gettime(void) {
     // LAB 12: Your code here
-    return 0;
+    return gettime();
 }
 
 /*
@@ -717,6 +717,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return (uintptr_t)sys_region_refs(a1, (size_t)a2, a3, (size_t)a4);
     case SYS_env_set_trapframe:
         return (uintptr_t)sys_env_set_trapframe((envid_t)a1, (struct Trapframe *)a2);
+    case SYS_gettime:
+        return (uintptr_t)sys_gettime();
     default:
         warn("syscall %lu not available", syscallno);
         return -E_NO_SYS;
