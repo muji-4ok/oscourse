@@ -569,7 +569,7 @@ dump_entry(pte_t base, size_t step, bool isz, int index) {
             base & PTE_U ? 'U' : '-',
             base & PTE_W ? 'W' : '-',
             base & PTE_NX ? '-' : 'X',
-            base & PTE_PS ? 'S' : '-',
+            (step == 2 * MB || step == 1 * GB) && (base & PTE_PS) ? 'S' : '-',
             step);
 }
 
