@@ -59,7 +59,7 @@
 #endif
 
 #ifndef trace_elf
-#define trace_elf 0
+#define trace_elf 1
 #endif
 
 #ifndef trace_elf_kdebug

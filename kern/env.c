@@ -508,13 +508,15 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             "mapping image region [0x%08lX : 0x%08lX] with zeros in kernel address space\n", image_start, image_end);
 
     int res = map_region(
-            &kspace, image_start, NULL, 0, image_end - image_start,
-            PROT_RWX | ALLOC_ZERO);
+            &env->address_space, image_start, NULL, 0, image_end - image_start,
+            PROT_RWX | ALLOC_ZERO | PROT_USER_);
 
     if (res < 0) {
         warn("map_region() of zeros failed: err = %i, start = %p, end = %p", res, (void *)image_start, (void *)image_end);
         return -E_INVALID_EXE;
     }
+
+    struct AddressSpace *old = switch_address_space(&env->address_space);
 
     // Either both set (normal case), or both unset (edge case - no loadable segments, not impossible?)
     assert((image_start == 0) == (image_start == 0));
@@ -543,16 +545,22 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         }
     }
 
-    if_cprintf(trace_elf, "mapping region from kernel to user address space\n");
+    switch_address_space(old);
 
-    res = map_region(
-            &env->address_space, image_start, &kspace, image_start, image_end - image_start,
-            PROT_RWX | PROT_USER_);
+    // if_cprintf(trace_elf, "mapping region from kernel to user address space\n");
 
-    if (res < 0) {
-        warn("map_region() failed: err = %i, start = %p, end = %p", res, (void *)image_start, (void *)image_end);
-        return -E_INVALID_EXE;
-    }
+    // res = map_region(
+    //         &env->address_space, image_start, &kspace, image_start, image_end - image_start,
+    //         PROT_RWX | PROT_USER_);
+
+    // if (res < 0) {
+    //     warn("map_region() failed: err = %i, start = %p, end = %p", res, (void *)image_start, (void *)image_end);
+    //     unmap_region(&kspace, image_start, image_end - image_start);
+    //     return -E_INVALID_EXE;
+    // }
+
+    // if_cprintf(trace_elf, "unmapping tmp kernel region\n");
+    // unmap_region(&kspace, image_start, image_end - image_start);
 
     if_cprintf(trace_elf, "setting entry point to env = %lx\n", elf->e_entry);
     if_cprintf(trace_elf, "setting flags to env = %x\n", elf->e_flags);
