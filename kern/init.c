@@ -193,7 +193,7 @@ i386_init(void) {
     // ENV_CREATE(user_faultalloc, ENV_TYPE_USER);
     // ENV_CREATE(user_faultallocbad, ENV_TYPE_USER);
     // ENV_CREATE(user_faultnostack, ENV_TYPE_USER);
-    ENV_CREATE(user_faultbadhandler, ENV_TYPE_USER);
+    ENV_CREATE(user_faultallocrec, ENV_TYPE_USER);
     // ENV_CREATE(user_faultevilhandler, ENV_TYPE_USER);
     // ENV_CREATE(user_primes, ENV_TYPE_USER);
     // ENV_CREATE(user_dumbfork, ENV_TYPE_USER);

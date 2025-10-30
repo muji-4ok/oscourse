@@ -94,6 +94,7 @@ KERN_BINFILES :=	user/hello \
 			user/faultdie \
 			user/faultregs \
 			user/faultalloc \
+			user/faultallocrec \
 			user/faultallocbad \
 			user/faultnostack \
 			user/faultbadhandler \
