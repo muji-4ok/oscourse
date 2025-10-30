@@ -31,7 +31,7 @@ nvme_map(struct NvmeController *ctl) {
         return NVME_MAP_ERR;
     }
 
-    DEBUG("NVMe MMIO base = %p, size = %x, pa = %lx", ctl->mmio_base_addr, memsize, nvme_pa);
+    DEBUG("NVMe MMIO base = %p, size = %lx, pa = %lx", ctl->mmio_base_addr, memsize, nvme_pa);
 
     return NVME_OK;
 }
